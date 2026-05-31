@@ -1424,7 +1424,8 @@ function buildNav(role){
     nav.innerHTML=`
       <div class="nav-section">Пультовик</div>
       <div class="nav-item" onclick="goto('worker-home')"><span class="icon">🏠</span> Главная</div>
-      <div class="nav-item" onclick="goto('operator-shift')"><span class="icon">⛽</span> Вахта / Заправки</div>
+      <div class="nav-item" onclick="goto('worker-fuel')"><span class="icon">⛽</span> Заправки</div>
+      <div class="nav-item" onclick="goto('operator-shift')"><span class="icon">🔄</span> Вахта (пультовик)</div>
       <div class="nav-item" onclick="goto('moto')"><span class="icon">⏱</span> Моточасы</div>
       <div class="nav-item" onclick="goto('calc')"><span class="icon">🧮</span> Расчёт топлива</div>
       <div class="nav-section">Мой профиль</div>
@@ -1435,6 +1436,7 @@ function buildNav(role){
     nav.innerHTML=`
       <div class="nav-section">Моя работа</div>
       <div class="nav-item" onclick="goto('worker-home')"><span class="icon">🏠</span> Главная</div>
+      <div class="nav-item" onclick="goto('worker-fuel')"><span class="icon">⛽</span> Заправки</div>
       <div class="nav-item" onclick="goto('moto')"><span class="icon">⏱</span> Моточасы</div>
       <div class="nav-item" onclick="goto('calc')"><span class="icon">🧮</span> Расчёт топлива</div>
       <div class="nav-section">Мой профиль</div>
@@ -1663,7 +1665,7 @@ function refreshCurrentPage(changedCol){
     employees: ['employees','dashboard','worker-home'],
     docs: ['docs'],
     equipment: ['equipment','worker-home','operator-shift','moto'],
-    fuelLog: ['fuel','dashboard'],
+    fuelLog: ['fuel','dashboard','worker-fuel'],
     training: ['training','worker-home','my-training'],
     vacations: ['vacations','my-vacation','worker-home'],
     sickLeaves: ['sick-leaves','worker-home'],
@@ -2302,7 +2304,9 @@ function saveShiftData(d){ localStorage.setItem('grp_shift_'+APP.currentUser, JS
 
 function renderOperatorShift(){
   try{
-  _shiftUnits = [{name:'',mh_start:0,fuel_start:0}];
+  if(_shiftUnits.length===0 || (_shiftUnits.length===1 && !_shiftUnits[0].name)){
+    _shiftUnits = [{name: APP.equipment.length>0 ? APP.equipment[0].name : '', mh_start:0, fuel_start:0}];
+  }
   const shift = getShiftData();
   const pg = document.getElementById('operator-shift-content');
   if(!pg) return;
@@ -2878,6 +2882,108 @@ document.addEventListener('click', function(e){
 });
 
 
+
+// ============ WORKER FUEL PAGE ============
+function renderWorkerFuel(){
+  const pg = document.getElementById('worker-fuel-content');
+  if(!pg) return;
+
+  // My fuel entries this period
+  const period = document.getElementById('global-period')?.value || '2026-05';
+  const myFuel = APP.fuelLog.filter(f=>f.operator===APP.currentUser && f.date.startsWith(period));
+  const totalMy = myFuel.reduce((s,f)=>s+f.liters,0);
+  const allFuel = APP.fuelLog.filter(f=>f.date.startsWith(period));
+  const totalAll = allFuel.reduce((s,f)=>s+f.liters,0);
+
+  pg.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">' +
+      '<div class="stat-card blue">' +
+        '<div class="stat-label">Мои заправки</div>' +
+        '<div class="stat-value blue">' + totalMy + '</div>' +
+        '<div class="stat-sub">литров за период</div>' +
+        '<div class="stat-icon">⛽</div>' +
+      '</div>' +
+      '<div class="stat-card green">' +
+        '<div class="stat-label">Всего по бригаде</div>' +
+        '<div class="stat-value green">' + totalAll + '</div>' +
+        '<div class="stat-sub">литров за период</div>' +
+        '<div class="stat-icon">📊</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="section" style="margin-bottom:16px">' +
+      '<div class="section-header"><div class="section-title">⛽ Добавить заправку</div></div>' +
+      '<div class="section-body">' +
+        '<div class="form-row cols-2">' +
+          '<div class="form-group"><label class="form-label">Установка</label>' +
+            '<select class="form-select" id="wf-unit">' +
+              APP.equipment.map(e=>`<option value="${e.name}">${e.name}${e.gov?' ('+e.gov+')':''}</option>`).join('') +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group"><label class="form-label">Дата</label>' +
+            '<input type="date" class="form-input" id="wf-date" value="'+new Date().toISOString().split('T')[0]+'">' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-row cols-2">' +
+          '<div class="form-group"><label class="form-label">Литров</label>' +
+            '<input type="number" class="form-input mono" id="wf-liters" placeholder="0">' +
+          '</div>' +
+          '<div class="form-group"><label class="form-label">Примечание</label>' +
+            '<input type="text" class="form-input" id="wf-note" placeholder="необязательно">' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn btn-primary" style="width:100%;justify-content:center" onclick="addWorkerFuel()">Добавить заправку</button>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="section">' +
+      '<div class="section-header">' +
+        '<div class="section-title">📋 История заправок</div>' +
+        '<div style="margin-left:auto;font-size:12px;color:var(--text2)">Период: ' + period + '</div>' +
+      '</div>' +
+      '<div class="section-body" style="padding:0;overflow-x:auto">' +
+        (myFuel.length===0 ?
+          '<div style="padding:20px;text-align:center;color:var(--text3)">Нет заправок за этот период</div>' :
+          '<table class="data-table">' +
+            '<thead><tr><th>Дата</th><th>Установка</th><th>Литров</th><th>Примечание</th><th></th></tr></thead>' +
+            '<tbody>' +
+              myFuel.map((f,i)=>{
+                const ri = APP.fuelLog.indexOf(f);
+                return '<tr>' +
+                  '<td class="mono" style="font-size:12px">' + fmt(f.date) + '</td>' +
+                  '<td style="font-size:12px">' + f.unit + '</td>' +
+                  '<td class="mono" style="color:var(--accent)">' + f.liters + '</td>' +
+                  '<td style="font-size:12px;color:var(--text2)">' + (f.note||'—') + '</td>' +
+                  '<td><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delWorkerFuel('+ri+')" title="Удалить">✕</button></td>' +
+                '</tr>';
+              }).join('') +
+            '</tbody>' +
+          '</table>'
+        ) +
+      '</div>' +
+    '</div>';
+}
+
+function addWorkerFuel(){
+  const unit = document.getElementById('wf-unit')?.value;
+  const date = document.getElementById('wf-date')?.value;
+  const liters = parseFloat(document.getElementById('wf-liters')?.value)||0;
+  const note = document.getElementById('wf-note')?.value||'';
+  if(!unit||!date||!liters) return alert('Заполните все поля');
+  APP.fuelLog.push({date, unit, liters, operator:APP.currentUser, note});
+  if(typeof saveToFirebase==='function') saveToFirebase('fuelLog', APP.fuelLog);
+  document.getElementById('wf-liters').value='';
+  document.getElementById('wf-note').value='';
+  renderWorkerFuel();
+}
+
+function delWorkerFuel(i){
+  if(!confirm('Удалить запись?')) return;
+  APP.fuelLog.splice(i,1);
+  if(typeof saveToFirebase==='function') saveToFirebase('fuelLog', APP.fuelLog);
+  renderWorkerFuel();
+}
+
 function initCalcSelects(){
   const sel = document.getElementById('calc-unit-sel');
   if(!sel) return;
@@ -2954,7 +3060,7 @@ goto = function(id){
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')===`goto('${id}')`)n.classList.add('active')});
   const allTitles={...titles, 'worker-home':'Моя главная', 'my-training':'Моё обучение', 'vacations':'График отпусков', 'my-vacation':'Мой отпуск','operator-shift':'Вахта / Заправки','sick-leaves':'Больничные листы'};
   document.getElementById('page-title').textContent=allTitles[id]||id;
-  const fn={dashboard:renderDashboard,employees:renderEmployees,docs:renderDocs,fuel:renderFuel,moto:renderMoto,training:renderTraining,equipment:renderEquipment,reports:renderReports,'worker-home':renderWorkerHome,'my-training':renderMyTraining,vacations:renderVacations,'my-vacation':renderMyVacation,'operator-shift':renderOperatorShift,'sick-leaves':renderSickLeaves,calc:()=>{renderCalcHistory();initCalcSelects()}};
+  const fn={dashboard:renderDashboard,employees:renderEmployees,docs:renderDocs,fuel:renderFuel,moto:renderMoto,training:renderTraining,equipment:renderEquipment,reports:renderReports,'worker-home':renderWorkerHome,'my-training':renderMyTraining,vacations:renderVacations,'my-vacation':renderMyVacation,'operator-shift':renderOperatorShift,'sick-leaves':renderSickLeaves,calc:()=>{renderCalcHistory();initCalcSelects()},'worker-fuel':renderWorkerFuel};
   if(fn[id])setTimeout(()=>fn[id](),0);
 }
 
@@ -3214,6 +3320,12 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
     </div>
   </div>
 </div>
+
+  <!-- WORKER FUEL PAGE -->
+  <div class="page" id="page-worker-fuel">
+    <div id="worker-fuel-content"></div>
+  </div>
+
 
 <!-- AUTH SCREEN -->
 <div class="auth-screen hidden" id="auth-screen">
