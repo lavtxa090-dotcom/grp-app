@@ -197,7 +197,7 @@ body{color-scheme:light}
       <div class="auth-user-name" id="sidebar-user-name">—</div>
       <div class="auth-user-role" id="sidebar-user-role">—</div>
     </div>
-    <button class="btn-icon btn-sm" style="margin-left:auto;font-size:11px;padding:4px 8px" onclick="doLogout()" title="Выйти">⏏</button>
+    <button class="btn-icon btn-sm" style="margin-left:auto;font-size:11px;padding:4px 8px" onclick="doLogout()" title="Выйти">⏏</button><button class="btn-icon btn-sm" style="margin-left:4px;font-size:12px;padding:4px 6px" onclick="openChangePass()" title="Сменить пароль">🔑</button>
   </div>
   <nav class="sidebar-nav">
     <div class="nav-section">Общее</div>
@@ -1343,6 +1343,52 @@ function buildNav(role){
   }
 }
 
+
+// ============ CHANGE PASSWORD ============
+function openChangePass(){
+  document.getElementById('cp-old').value='';
+  document.getElementById('cp-new').value='';
+  document.getElementById('cp-new2').value='';
+  const err = document.getElementById('cp-error');
+  if(err) err.classList.remove('show');
+  openModal('modal-change-pass');
+}
+
+function changePassword(){
+  const oldPass = document.getElementById('cp-old').value;
+  const newPass = document.getElementById('cp-new').value;
+  const newPass2 = document.getElementById('cp-new2').value;
+  const errEl = document.getElementById('cp-error');
+
+  if(!oldPass){ errEl.textContent='Введите текущий пароль'; errEl.classList.add('show'); return; }
+  if(newPass.length<6){ errEl.textContent='Новый пароль — минимум 6 символов'; errEl.classList.add('show'); return; }
+  if(newPass!==newPass2){ errEl.textContent='Пароли не совпадают'; errEl.classList.add('show'); return; }
+
+  if(!auth||!auth.currentUser){ errEl.textContent='Ошибка авторизации'; errEl.classList.add('show'); return; }
+
+  const user = auth.currentUser;
+  const emp = APP.employees.find(e=>e.name===APP.currentUser);
+  if(!emp){ errEl.textContent='Пользователь не найден'; errEl.classList.add('show'); return; }
+
+  const email = (emp.tab||emp.name.replace(/\s/g,'').toLowerCase()) + '@grp.brigade';
+
+  // Re-authenticate first, then change password
+  const credential = firebase.auth.EmailAuthProvider.credential(email, oldPass);
+  user.reauthenticateWithCredential(credential)
+    .then(()=> user.updatePassword(newPass))
+    .then(()=>{
+      closeModal('modal-change-pass');
+      alert('✅ Пароль успешно изменён!');
+    })
+    .catch(err=>{
+      if(err.code==='auth/wrong-password'||err.code==='auth/invalid-credential')
+        errEl.textContent='Неверный текущий пароль';
+      else
+        errEl.textContent=err.message;
+      errEl.classList.add('show');
+    });
+}
+
 function initFirebase(){
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
@@ -1425,11 +1471,20 @@ function doLogin(){
   // Use email = tab@grp.local for Firebase Auth
   const email = (emp.tab||name.replace(/\s/g,'').toLowerCase()) + '@grp.brigade';
   auth.signInWithEmailAndPassword(email, pass)
-    .then(()=>{ /* handled by onAuthStateChanged */ })
+    .then(cred=>{
+      const session = {name, role: emp.role};
+      if(db){
+        db.ref('users/'+cred.user.uid).get().then(snap=>{
+          const profile = snap.val();
+          const s = profile ? {name:profile.name, role:profile.role} : session;
+          applySession(s); loadAllData();
+        }).catch(()=>{ applySession(session); });
+      } else { applySession(session); }
+    })
     .catch(err=>{
-      if(err.code==='auth/user-not-found') showAuthError('Аккаунт не найден — сначала зарегистрируйтесь');
+      if(err.code==='auth/user-not-found'||err.code==='auth/invalid-credential'||err.code==='auth/invalid-login-credentials')
+        showAuthError('Аккаунт не найден — сначала зарегистрируйтесь');
       else if(err.code==='auth/wrong-password') showAuthError('Неверный пароль');
-      else if(err.code==='auth/weak-password') showAuthError('Пароль слишком простой — минимум 6 символов');
       else showAuthError(err.message);
     });
 }
@@ -1447,11 +1502,18 @@ function doRegister(){
   const email = (emp.tab||name.replace(/\s/g,'').toLowerCase()) + '@grp.brigade';
   auth.createUserWithEmailAndPassword(email, pass)
     .then(cred=>{
-      // Save user profile to DB
-      return db.ref('users/'+cred.user.uid).set({name, role:emp.role, tab:emp.tab||''});
+      const session = {name, role: emp.role};
+      // Save profile to DB then apply session immediately
+      if(db){
+        db.ref('users/'+cred.user.uid).set({name, role:emp.role, tab:emp.tab||''})
+          .then(()=>{ applySession(session); loadAllData(); })
+          .catch(()=>{ applySession(session); }); // apply even if DB write fails
+      } else {
+        applySession(session);
+      }
     })
     .catch(err=>{
-      if(err.code==='auth/email-already-in-use') showAuthError('Аккаунт уже существует — войдите');
+      if(err.code==='auth/email-already-in-use') showAuthError('Аккаунт уже существует — нажмите «Войти»');
       else if(err.code==='auth/weak-password') showAuthError('Пароль слишком простой — минимум 6 символов');
       else showAuthError(err.message);
     });
@@ -2941,6 +3003,29 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-add-moto')">Отмена</button>
       <button class="btn btn-primary" onclick="saveAddMoto()">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-change-pass">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-title">🔑 Сменить пароль</div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Текущий пароль</label>
+      <input type="password" class="form-input" id="cp-old" placeholder="Введите текущий пароль">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Новый пароль</label>
+      <input type="password" class="form-input" id="cp-new" placeholder="Минимум 6 символов">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Повторите новый пароль</label>
+      <input type="password" class="form-input" id="cp-new2" placeholder="Повторите пароль">
+    </div>
+    <div id="cp-error" class="auth-error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-change-pass')">Отмена</button>
+      <button class="btn btn-primary" onclick="changePassword()">Сохранить</button>
     </div>
   </div>
 </div>
