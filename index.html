@@ -1801,25 +1801,43 @@ function refreshCurrentPage(changedCol){
 // Override data modification to also save to Firebase
 
 function saveToFirebase(collection, data){
-  if(!db){ console.warn('Firebase not ready'); return; }
-  if(!auth || !auth.currentUser){ 
-    console.warn('Not authenticated, cannot save to Firebase');
+  if(!db){ 
+    showToast('⚠ Firebase не подключён', 'red');
     return; 
   }
-  syncStart();
-  fbSet(collection, data)
+  if(!auth || !auth.currentUser){ 
+    showToast('⚠ Не авторизован', 'red');
+    return; 
+  }
+  const el = document.getElementById('sync-status');
+  if(el){ el.textContent='⟳ Сохранение...'; el.style.color='var(--text3)'; }
+  
+  db.ref(collection).set(data)
     .then(()=>{
-      syncDone();
-      console.log('Saved to Firebase:', collection, Array.isArray(data)?data.length+' items':data);
+      if(el){ el.textContent='✓ Сохранено'; el.style.color='var(--green)'; 
+        setTimeout(()=>{ if(el.textContent==='✓ Сохранено') el.textContent=''; },2000); }
     })
     .catch(e=>{ 
-      console.error('Firebase save error for', collection, ':', e.message);
-      syncError();
-      if(e.message && e.message.includes('PERMISSION_DENIED')){
-        const el = document.getElementById('sync-status');
-        if(el){ el.textContent='⚠ Нет прав на запись'; el.style.color='var(--red)'; }
-      }
+      console.error('Firebase save error:', collection, e.code, e.message);
+      if(el){ el.textContent='✕ Ошибка: '+e.code; el.style.color='var(--red)'; }
+      showToast('Ошибка сохранения: '+e.code, 'red');
     });
+}
+
+function showToast(msg, color){
+  let t = document.getElementById('app-toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'app-toast';
+    t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:6px;font-size:13px;z-index:9999;transition:opacity .3s;font-family:var(--font-m)';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = color==='red'?'#dc2626':'#16a34a';
+  t.style.color = '#fff';
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.style.opacity='0'; }, 3000);
 }
 
 // Wrap key save operations
