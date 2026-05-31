@@ -1560,7 +1560,7 @@ function refreshCurrentPage(changedCol){
   const pageMap = {
     employees: ['employees','dashboard','worker-home'],
     docs: ['docs'],
-    equipment: ['equipment','worker-home','operator-shift'],
+    equipment: ['equipment','worker-home','operator-shift','moto'],
     fuelLog: ['fuel','dashboard'],
     training: ['training','worker-home','my-training'],
     vacations: ['vacations','my-vacation','worker-home'],
@@ -1774,15 +1774,15 @@ function renderWorkerHome(){
       '<div class="section">' +
         '<div class="section-header"><div class="section-title">⏱ Внести моточасы</div></div>' +
         '<div class="section-body" style="padding:0">' +
-          APP.motoData.map((m,i)=>
+          APP.equipment.map((e,i)=>
             '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">' +
               '<div>' +
-                '<div style="font-weight:600;font-size:13px">' + m.name + '</div>' +
-                '<div style="font-size:11px;color:var(--text3);font-family:var(--font-m)">' + m.gov_tractor + '</div>' +
+                '<div style="font-weight:600;font-size:13px">' + e.name + '</div>' +
+                '<div style="font-size:11px;color:var(--text3);font-family:var(--font-m)">' + (e.gov||'') + (e.gar?' · гар. '+e.gar:'') + '</div>' +
               '</div>' +
               '<div style="display:flex;align-items:center;gap:8px">' +
-                '<span class="badge ' + (m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray') + '">' + m.status + '</span>' +
-                '<button class="btn btn-primary btn-sm" onclick="gotoMotoUnit(' + i + ')">Внести →</button>' +
+                '<span class="badge ' + (e.status==='Активна'?'badge-green':e.status==='Ремонт'?'badge-red':'badge-gray') + '">' + e.status + '</span>' +
+                '<button class="btn btn-primary btn-sm" onclick="gotoMotoEquip(' + i + ')">Внести →</button>' +
               '</div>' +
             '</div>'
           ).join('') +
@@ -1797,6 +1797,25 @@ function gotoMotoUnit(idx){
   goto('moto');
   setTimeout(()=>{
     document.getElementById('moto-unit-select').value=idx;
+    renderMotoCard();
+  },50);
+}
+
+function gotoMotoEquip(equipIdx){
+  // Find matching motoData entry or use equipment name
+  const eq = APP.equipment[equipIdx];
+  if(!eq) return;
+  goto('moto');
+  setTimeout(()=>{
+    const sel = document.getElementById('moto-unit-select');
+    if(!sel) return;
+    // Try to find by name
+    const motoIdx = APP.motoData.findIndex(m=>m.name===eq.name || m.gov_tractor===eq.gov);
+    if(motoIdx>=0){
+      sel.value = motoIdx;
+    } else {
+      sel.value = 0;
+    }
     renderMotoCard();
   },50);
 }
