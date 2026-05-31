@@ -1635,27 +1635,63 @@ function doLogout(){
 
 // ============ FIREBASE DATA SYNC ============
 function loadAllData(){
-  // Load each collection and set up live listeners
-  const collections = ['employees','docs','equipment','fuelLog','training','vacations','sickLeaves','motoData','calcHistory'];
-  collections.forEach(col=>{
-    db.ref(col).on('value', snap=>{
-      const data = snap.val();
-      if(data){
-        if(Array.isArray(data)){
-          APP[col] = data;
-        } else {
-          // Firebase stores arrays as objects with numeric keys — convert back preserving order
-          const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b));
-          APP[col] = keys.map(k=>data[k]).filter(v=>v!=null);
-        }
-      } else {
-        // First time — push initial data to Firebase
+  // Check if Firebase has been initialized before (has any data)
+  db.ref('_initialized').get().then(snap=>{
+    const isFirstTime = !snap.val();
+    
+    const collections = ['employees','docs','equipment','fuelLog','training','vacations','sickLeaves','motoData','calcHistory'];
+    
+    if(isFirstTime){
+      // First ever launch - push all default data to Firebase
+      console.log('First launch - seeding Firebase with default data');
+      const promises = collections.map(col=>{
         if(APP[col] && APP[col].length>0){
-          fbSet(col, APP[col]);
+          return fbSet(col, APP[col]);
         }
-      }
-      // Refresh current page if it shows this data
-      refreshCurrentPage(col);
+        return Promise.resolve();
+      });
+      Promise.all(promises).then(()=>{
+        fbSet('_initialized', true);
+        console.log('Firebase seeded successfully');
+      });
+    }
+    
+    // Set up live listeners - ONLY update APP from Firebase, never push back
+    collections.forEach(col=>{
+      db.ref(col).on('value', snap=>{
+        const data = snap.val();
+        if(data !== null && data !== undefined){
+          // Firebase has data - use it (even if empty array)
+          if(Array.isArray(data)){
+            APP[col] = data;
+          } else if(typeof data === 'object'){
+            const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b));
+            APP[col] = keys.map(k=>data[k]).filter(v=>v!=null);
+          }
+        }
+        // If data is null - user deleted everything, keep APP empty, don't restore
+        if(data === null){
+          APP[col] = [];
+        }
+        refreshCurrentPage(col);
+      });
+    });
+  }).catch(err=>{
+    console.error('loadAllData error:', err);
+    // Fallback - just set up listeners without seeding
+    const collections = ['employees','docs','equipment','fuelLog','training','vacations','sickLeaves','motoData','calcHistory'];
+    collections.forEach(col=>{
+      db.ref(col).on('value', snap=>{
+        const data = snap.val();
+        if(data !== null && data !== undefined){
+          if(Array.isArray(data)) APP[col]=data;
+          else if(typeof data==='object'){
+            const keys=Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b));
+            APP[col]=keys.map(k=>data[k]).filter(v=>v!=null);
+          }
+        } else { APP[col]=[]; }
+        refreshCurrentPage(col);
+      });
     });
   });
 }
