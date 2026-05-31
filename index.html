@@ -5,10 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ГРП — Система управления бригадой</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8f0fe;--bg4:#dde8fb;--border:#c5d5ea;--border2:#a8bcd8;--text:#0d1b2a;--text2:#4a6080;--text3:#8aa0b8;--accent:#1b379e;--accent2:#2347c0;--red:#dc2626;--green:#16a34a;--blue:#1b379e;--purple:#7c3aed;--orange:#ea580c;--font-h:'Oswald',sans-serif;--font-b:'IBM Plex Sans',sans-serif;--font-m:'IBM Plex Mono',monospace}
@@ -1273,17 +1269,43 @@ const FIREBASE_CONFIG = {
   measurementId: "G-T8CG7FVN3H"
 };
 
-firebase.initializeApp(FIREBASE_CONFIG);
-const db = firebase.database();
-const auth = firebase.auth();
+// Initialize Firebase after SDK loads
+let db, auth;
+function initFirebase(){
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    auth = firebase.auth();
+    
+    // Auth state listener
+    auth.onAuthStateChanged(user=>{
+      if(user){
+        db.ref('users/'+user.uid).get().then(snap=>{
+          const profile = snap.val();
+          if(profile){
+            const session = {name: profile.name, role: profile.role};
+            applySession(session);
+            loadAllData();
+          }
+        });
+      } else {
+        // No user - show auth screen
+        const as = document.getElementById('auth-screen');
+        if(as) as.classList.remove('hidden');
+      }
+    });
+  } catch(e) {
+    console.error('Firebase init error:', e);
+  }
+}
 
 // Firebase helpers
-function fbSet(path, data){ return db.ref(path).set(data); }
-function fbPush(path, data){ return db.ref(path).push(data); }
-function fbUpdate(path, data){ return db.ref(path).update(data); }
-function fbRemove(path){ return db.ref(path).remove(); }
-function fbGet(path){ return db.ref(path).get(); }
-function fbOn(path, cb){ db.ref(path).on('value', snap => cb(snap.val())); }
+function fbSet(path, data){ return db ? db.ref(path).set(data) : Promise.reject('db not ready'); }
+function fbPush(path, data){ return db ? db.ref(path).push(data) : Promise.reject('db not ready'); }
+function fbUpdate(path, data){ return db ? db.ref(path).update(data) : Promise.reject('db not ready'); }
+function fbRemove(path){ return db ? db.ref(path).remove() : Promise.reject('db not ready'); }
+function fbGet(path){ return db ? db.ref(path).get() : Promise.reject('db not ready'); }
+function fbOn(path, cb){ if(db) db.ref(path).on('value', snap => cb(snap.val())); }
 
 // Sync indicator
 let syncPending = 0;
@@ -1300,8 +1322,28 @@ function showSyncStatus(s){
   if(s==='saved') setTimeout(()=>{if(el.textContent==='✓ Сохранено')el.textContent='';},2000);
 }
 
+
+function showAuthError(msg){
+  const el = document.getElementById('auth-error');
+  if(el){ el.textContent = msg; el.classList.add('show'); }
+}
+
+function authTab(t){
+  const login = document.getElementById('atab-login');
+  const reg = document.getElementById('atab-register');
+  const lf = document.getElementById('auth-login-form');
+  const rf = document.getElementById('auth-register-form');
+  if(login) login.classList.toggle('active', t==='login');
+  if(reg) reg.classList.toggle('active', t==='register');
+  if(lf) lf.style.display = t==='login' ? '' : 'none';
+  if(rf) rf.style.display = t==='register' ? '' : 'none';
+  const err = document.getElementById('auth-error');
+  if(err) err.classList.remove('show');
+}
+
 // ============ FIREBASE AUTH ============
 function doLogin(){
+  if(!auth) return showAuthError('Подождите — соединение устанавливается...');
   const name = document.getElementById('login-name').value;
   const pass = document.getElementById('login-pass').value;
   if(!name) return showAuthError('Выберите ФИО из списка');
@@ -1320,6 +1362,7 @@ function doLogin(){
 }
 
 function doRegister(){
+  if(!auth) return showAuthError('Подождите — соединение устанавливается...');
   const name = document.getElementById('reg-name').value;
   const pass = document.getElementById('reg-pass').value;
   const pass2 = document.getElementById('reg-pass2').value;
@@ -1348,20 +1391,7 @@ function doLogout(){
   });
 }
 
-// Auth state listener — fires on login/logout
-auth.onAuthStateChanged(user=>{
-  if(user){
-    db.ref('users/'+user.uid).get().then(snap=>{
-      const profile = snap.val();
-      if(profile){
-        const session = {name: profile.name, role: profile.role};
-        applySession(session);
-        // Load all data from Firebase
-        loadAllData();
-      }
-    });
-  }
-});
+// onAuthStateChanged is handled inside initFirebase()
 
 // ============ FIREBASE DATA SYNC ============
 function loadAllData(){
@@ -1418,6 +1448,7 @@ function refreshCurrentPage(changedCol){
 // Override data modification to also save to Firebase
 
 function saveToFirebase(collection, data){
+  if(!db){ console.warn('Firebase not ready'); return; }
   syncStart();
   fbSet(collection, data)
     .then(syncDone)
@@ -2586,11 +2617,11 @@ function fillAuthSelects(){
 function initApp(){
   document.getElementById('sl-date-start') && (document.getElementById('sl-date-start').value = new Date().toISOString().split('T')[0]);
   renderPjdList();calcSimple();calcCalc();renderCalcHistory();
-  // Fill auth selects immediately from APP.employees (always available)
   fillAuthSelects();
-  // Firebase onAuthStateChanged handles session restore - just show auth screen
-  // (will be hidden if user is already logged in via Firebase)
-  document.getElementById('auth-screen').classList.remove('hidden');
+  // Show auth screen initially (Firebase will hide it if user is logged in)
+  const as = document.getElementById('auth-screen');
+  if(as) as.classList.remove('hidden');
+  // Firebase init called by SDK onload
 }
 
 // goto handles both master and worker pages
@@ -2893,5 +2924,10 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
   </div>
   <div style="margin-top:20px;font-size:11px;color:var(--text3);font-family:var(--font-m)">v2.0 · ПНП / ГРП</div>
 </div>
+
+  <!-- Firebase SDK - loaded at end for proper initialization -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onload="initFirebase()"></script>
 </body>
 </html>
