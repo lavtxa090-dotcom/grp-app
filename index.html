@@ -1042,7 +1042,9 @@ function renderFuel(){
   document.getElementById('fuel-total-label').textContent='Итого: '+tot.toLocaleString()+' л';
   document.getElementById('fuel-table').innerHTML=list.map((f)=>`<tr><td class="mono" style="font-size:12px">${fmt(f.date)}</td><td>${f.unit}</td><td class="mono" style="color:var(--accent)">${f.liters}</td><td style="color:var(--text2);font-size:12px">${f.operator}</td><td><button class="btn-icon btn-sm" onclick="APP.fuelLog.splice(${APP.fuelLog.indexOf(f)},1);renderFuel();renderDashboard()">✕</button></td></tr>`).join('');
 }
-function addFuel(){const d=document.getElementById('f-date').value,u=document.getElementById('f-unit').value,l=parseFloat(document.getElementById('f-liters').value)||0,op=document.getElementById('f-operator').value;if(!d||!l)return alert('Заполните дату и литры');APP.fuelLog.push({date:d,unit:u,liters:l,operator:op});renderFuel();renderDashboard()}
+function addFuel(){const d=document.getElementById('f-date').value,u=document.getElementById('f-unit').value,l=parseFloat(document.getElementById('f-liters').value)||0,op=document.getElementById('f-operator').value;if(!d||!l)return alert('Заполните дату и литры');APP.fuelLog.push({date:d,unit:u,liters:l,operator:op});renderFuel();renderDashboard()
+  saveToFirebase('fuelLog', APP.fuelLog);
+}
 
 // CALC TABS
 function calcTab(t){
@@ -1245,7 +1247,9 @@ function renderMotoMaster(){
   document.getElementById('moto-master-body').innerHTML=APP.motoData.map((m,i)=>`<tr><td class="mono" style="color:var(--text3)">${i+1}</td><td>${m.name}<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-m)">${m.gov_tractor}</span></td><td class="mono">${m.km||'—'}</td><td class="mono">${m.mh_tractor||'—'}</td><td style="font-size:12px;color:var(--text2);font-family:var(--font-m)">${m.gov_unit}</td><td class="mono">${m.mh_unit||'—'}</td><td><span class="badge ${m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray'}">${m.status}</span></td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openMotoEdit(${i})">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delMotoUnit(${i})">✕</button></td></tr>`).join('');
 }
 function openMotoEdit(i){const m=APP.motoData[i];document.getElementById('em-idx').value=i;document.getElementById('em-title').textContent=m.name+' ('+m.gov_tractor+')';document.getElementById('em-km').value=m.km||'';document.getElementById('em-mh-t').value=m.mh_tractor||'';document.getElementById('em-mh-u').value=m.mh_unit||'';document.getElementById('em-status').value=m.status;openModal('modal-edit-moto')}
-function saveMotoEdit(){const i=parseInt(document.getElementById('em-idx').value);APP.motoData[i].km=document.getElementById('em-km').value;APP.motoData[i].mh_tractor=document.getElementById('em-mh-t').value;APP.motoData[i].mh_unit=document.getElementById('em-mh-u').value;APP.motoData[i].status=document.getElementById('em-status').value;closeModal('modal-edit-moto');renderMotoMaster()}
+function saveMotoEdit(){const i=parseInt(document.getElementById('em-idx').value);APP.motoData[i].km=document.getElementById('em-km').value;APP.motoData[i].mh_tractor=document.getElementById('em-mh-t').value;APP.motoData[i].mh_unit=document.getElementById('em-mh-u').value;APP.motoData[i].status=document.getElementById('em-status').value;closeModal('modal-edit-moto');renderMotoMaster()
+  saveToFirebase('motoData', APP.motoData);
+}
 function exportMoto(){
   if(!window.XLSX)return alert('XLSX не загружен');
   const wb=XLSX.utils.book_new();
@@ -2751,6 +2755,7 @@ function openSickLeave(){
   updateSickBadge();
   renderWorkerHome();
   alert('✅ Больничный открыт. Мастер уведомлён.');
+  saveToFirebase('sickLeaves', APP.sickLeaves);
 }
 
 function closeSickLeave(){
@@ -2771,6 +2776,7 @@ function closeSickLeaveConfirm(){
   closeModal('modal-close-sick');
   updateSickBadge();
   renderWorkerHome();
+  saveToFirebase('sickLeaves', APP.sickLeaves);
 }
 
 function updateSickBadge(){
@@ -2988,6 +2994,7 @@ function delMotoUnit(i){
 // ============ FUEL LOG MANAGEMENT ============
 function delFuel(i){
   APP.fuelLog.splice(i,1);
+  saveToFirebase('fuelLog', APP.fuelLog);
   renderFuel();
   renderDashboard();
 }
