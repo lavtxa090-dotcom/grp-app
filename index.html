@@ -3514,5 +3514,16 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onload="initFirebase()"></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', ()=>{
+        navigator.serviceWorker.register('/grp-app/sw.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW error:', err));
+      });
+    }
+  </script>
 </body>
 </html>
