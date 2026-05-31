@@ -1540,8 +1540,9 @@ function loadAllData(){
         if(Array.isArray(data)){
           APP[col] = data;
         } else {
-          // Firebase stores arrays as objects with keys — convert back
-          APP[col] = Object.values(data);
+          // Firebase stores arrays as objects with numeric keys — convert back preserving order
+          const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b));
+          APP[col] = keys.map(k=>data[k]).filter(v=>v!=null);
         }
       } else {
         // First time — push initial data to Firebase
@@ -1557,14 +1558,14 @@ function loadAllData(){
 
 function refreshCurrentPage(changedCol){
   const pageMap = {
-    employees: ['employees','dashboard'],
+    employees: ['employees','dashboard','worker-home'],
     docs: ['docs'],
-    equipment: ['equipment'],
+    equipment: ['equipment','worker-home','operator-shift'],
     fuelLog: ['fuel','dashboard'],
-    training: ['training'],
-    vacations: ['vacations'],
+    training: ['training','worker-home','my-training'],
+    vacations: ['vacations','my-vacation','worker-home'],
     sickLeaves: ['sick-leaves','worker-home'],
-    motoData: ['moto'],
+    motoData: ['moto','worker-home'],
     calcHistory: ['calc'],
   };
   const pages = pageMap[changedCol]||[];
