@@ -1271,6 +1271,78 @@ const FIREBASE_CONFIG = {
 
 // Initialize Firebase after SDK loads
 let db, auth;
+
+// ============ SESSION MANAGEMENT ============
+function applySession(session){
+  APP.currentUser = session.name;
+  APP.role = session.role;
+  const emp = APP.employees.find(e=>e.name===session.name);
+  // Update sidebar user info
+  const nameEl = document.getElementById('sidebar-user-name');
+  const roleEl = document.getElementById('sidebar-user-role');
+  if(nameEl) nameEl.textContent = session.name;
+  if(roleEl) roleEl.textContent = (session.role==='master'?'⭐ Мастер':session.role==='operator'?'🎛 Пультовик':'👷 Работник') + (emp?' · '+emp.pos:'');
+  // Build nav based on role
+  buildNav(session.role);
+  // Hide auth screen
+  const as = document.getElementById('auth-screen');
+  if(as) as.classList.add('hidden');
+  // Navigate to start page
+  if(session.role==='master'){
+    goto('dashboard');
+  } else if(session.role==='operator'){
+    goto('operator-shift');
+  } else {
+    goto('worker-home');
+  }
+}
+
+function buildNav(role){
+  const nav = document.querySelector('.sidebar-nav');
+  if(!nav) return;
+  if(role==='master'){
+    nav.innerHTML=`
+      <div class="nav-section">Общее</div>
+      <div class="nav-item" onclick="goto('dashboard')"><span class="icon">📊</span> Дашборд</div>
+      <div class="nav-item" onclick="goto('employees')"><span class="icon">👷</span> Сотрудники</div>
+      <div class="nav-item" onclick="goto('docs')"><span class="icon">📄</span> Документы <span class="nav-badge warn" id="nb-docs">3</span></div>
+      <div class="nav-section">Операции</div>
+      <div class="nav-item" onclick="goto('fuel')"><span class="icon">⛽</span> Журнал заправок</div>
+      <div class="nav-item" onclick="goto('calc')"><span class="icon">🧮</span> Расчёт топлива</div>
+      <div class="nav-item" onclick="goto('moto')"><span class="icon">⏱</span> Моточасы</div>
+      <div class="nav-section">HR</div>
+      <div class="nav-item" onclick="goto('training')"><span class="icon">🎓</span> Обучение <span class="nav-badge" id="nb-train">—</span></div>
+      <div class="nav-item" onclick="goto('vacations')"><span class="icon">🏖</span> Отпуска</div>
+      <div class="nav-item" onclick="goto('sick-leaves')"><span class="icon">🏥</span> Больничные <span class="nav-badge warn" id="nb-sick">0</span></div>
+      <div class="nav-item" onclick="goto('equipment')"><span class="icon">🔧</span> Техника</div>
+      <div class="nav-section">Отчёты</div>
+      <div class="nav-item" onclick="goto('reports')"><span class="icon">📁</span> Отчёты</div>
+    `;
+  } else if(role==='operator'){
+    nav.innerHTML=`
+      <div class="nav-section">Пультовик</div>
+      <div class="nav-item" onclick="goto('worker-home')"><span class="icon">🏠</span> Главная</div>
+      <div class="nav-item" onclick="goto('operator-shift')"><span class="icon">⛽</span> Вахта / Заправки</div>
+      <div class="nav-item" onclick="goto('moto')"><span class="icon">⏱</span> Моточасы</div>
+      <div class="nav-item" onclick="goto('calc')"><span class="icon">🧮</span> Расчёт топлива</div>
+      <div class="nav-section">Мой профиль</div>
+      <div class="nav-item" onclick="goto('my-training')"><span class="icon">🎓</span> Моё обучение</div>
+      <div class="nav-item" onclick="goto('my-vacation')"><span class="icon">🏖</span> Мой отпуск</div>
+    `;
+  } else {
+    nav.innerHTML=`
+      <div class="nav-section">Моя работа</div>
+      <div class="nav-item" onclick="goto('worker-home')"><span class="icon">🏠</span> Главная</div>
+      <div class="nav-item" onclick="goto('moto')"><span class="icon">⏱</span> Моточасы</div>
+      <div class="nav-item" onclick="goto('calc')"><span class="icon">🧮</span> Расчёт топлива</div>
+      <div class="nav-section">Мой профиль</div>
+      <div class="nav-item" onclick="goto('my-training')"><span class="icon">🎓</span> Моё обучение</div>
+      <div class="nav-item" onclick="goto('my-vacation')"><span class="icon">🏖</span> Мой отпуск</div>
+      <div class="nav-item" onclick="openModal('modal-sick-leave')"><span class="icon">🏥</span> Больничный</div>
+    `;
+  }
+}
+
 function initFirebase(){
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
@@ -1357,6 +1429,7 @@ function doLogin(){
     .catch(err=>{
       if(err.code==='auth/user-not-found') showAuthError('Аккаунт не найден — сначала зарегистрируйтесь');
       else if(err.code==='auth/wrong-password') showAuthError('Неверный пароль');
+      else if(err.code==='auth/weak-password') showAuthError('Пароль слишком простой — минимум 6 символов');
       else showAuthError(err.message);
     });
 }
@@ -1367,7 +1440,7 @@ function doRegister(){
   const pass = document.getElementById('reg-pass').value;
   const pass2 = document.getElementById('reg-pass2').value;
   if(!name) return showAuthError('Выберите ФИО из списка');
-  if(pass.length<4) return showAuthError('Пароль не менее 4 символов');
+  if(pass.length<6) return showAuthError('Пароль не менее 6 символов (требование Firebase)');
   if(pass!==pass2) return showAuthError('Пароли не совпадают');
   const emp = APP.employees.find(e=>e.name===name);
   if(!emp) return showAuthError('Сотрудник не найден');
@@ -1379,6 +1452,7 @@ function doRegister(){
     })
     .catch(err=>{
       if(err.code==='auth/email-already-in-use') showAuthError('Аккаунт уже существует — войдите');
+      else if(err.code==='auth/weak-password') showAuthError('Пароль слишком простой — минимум 6 символов');
       else showAuthError(err.message);
     });
 }
