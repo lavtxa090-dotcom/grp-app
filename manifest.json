@@ -3,10 +3,12 @@
   "short_name": "ГРП Бригада",
   "description": "Система управления бригадой ГРП — NEWTECK Well Service",
   "start_url": "/grp-app/",
+  "scope": "/grp-app/",
   "display": "standalone",
   "background_color": "#f0f4f8",
   "theme_color": "#1b1fbe",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
+  "lang": "ru",
   "icons": [
     {
       "src": "icon-192.png",
@@ -19,6 +21,11 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ]
 }
