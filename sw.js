@@ -1,4 +1,4 @@
-const CACHE_NAME = 'grp-brigade-v1';
+const CACHE_NAME = 'grp-brigade-v2';
 const urlsToCache = [
   '/grp-app/',
   '/grp-app/index.html',
@@ -10,7 +10,9 @@ const urlsToCache = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(urlsToCache))
+      .catch(err => console.log('Cache install error:', err))
   );
   self.skipWaiting();
 });
@@ -25,17 +27,15 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Firebase запросы не кешируем
-  if (event.request.url.includes('firebase') || 
-      event.request.url.includes('googleapis') ||
-      event.request.url.includes('gstatic')) {
+  // Don't cache Firebase/Google requests
+  const url = event.request.url;
+  if (url.includes('firebase') || url.includes('googleapis') || 
+      url.includes('gstatic') || url.includes('identitytoolkit')) {
     return;
   }
   event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request).catch(() => {
-        return caches.match('/grp-app/index.html');
-      });
-    })
+    caches.match(event.request)
+      .then(response => response || fetch(event.request))
+      .catch(() => caches.match('/grp-app/index.html'))
   );
 });
