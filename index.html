@@ -4075,20 +4075,50 @@ function openEditEmployee(i){
 }
 function saveEditEmployee(){
   const i = parseInt(document.getElementById('ee-idx').value);
-  APP.employees[i].name = document.getElementById('ee-name').value.trim();
+  const oldName = APP.employees[i].name;
+  const newName = document.getElementById('ee-name').value.trim();
+  APP.employees[i].name = newName;
   APP.employees[i].pos = document.getElementById('ee-pos').value.trim();
   APP.employees[i].tab = document.getElementById('ee-tab').value.trim();
   APP.employees[i].role = document.getElementById('ee-role').value;
   APP.employees[i].status = document.getElementById('ee-status').value;
+
+  // Cascade rename in all related collections
+  if(oldName !== newName){
+    APP.training.forEach(t=>{ if(t.person===oldName) t.person=newName; });
+    APP.vacations.forEach(v=>{ if(v.person===oldName) v.person=newName; });
+    APP.sickLeaves.forEach(s=>{ if(s.name===oldName) s.name=newName; });
+    APP.fuelLog.forEach(f=>{ if(f.operator===oldName) f.operator=newName; });
+    APP.motoData.forEach(m=>{ if(m.updatedBy===oldName) m.updatedBy=newName; });
+    saveToFirebase('training', APP.training);
+    saveToFirebase('vacations', APP.vacations);
+    saveToFirebase('sickLeaves', APP.sickLeaves);
+    saveToFirebase('fuelLog', APP.fuelLog);
+  }
+
   closeModal('modal-edit-emp');
-  renderEmployees();saveToFirebase('employees',APP.employees);
+  renderEmployees();
+  saveToFirebase('employees', APP.employees);
+  fillAuthSelects(); // update login/register list
 }
 function delEmployee(i){
   const name = APP.employees[i].name;
-  if(confirm('Удалить сотрудника: ' + name + '?')){
+  if(confirm('Удалить сотрудника ' + name + ' и все его данные?')){
+    // Remove from employees
     APP.employees.splice(i,1);
+    // Remove from training
+    APP.training = APP.training.filter(t=>t.person!==name);
+    // Remove from vacations
+    APP.vacations = APP.vacations.filter(v=>v.person!==name);
+    // Remove from sickLeaves
+    APP.sickLeaves = APP.sickLeaves.filter(s=>s.name!==name);
+    // Save all affected collections
+    saveToFirebase('employees', APP.employees);
+    saveToFirebase('training', APP.training);
+    saveToFirebase('vacations', APP.vacations);
+    saveToFirebase('sickLeaves', APP.sickLeaves);
     renderEmployees();
-    saveToFirebase('employees',APP.employees);
+    fillAuthSelects();
   }
 }
 
