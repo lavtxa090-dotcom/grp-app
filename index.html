@@ -647,6 +647,9 @@ body{color-scheme:light}
     <div class="form-row"><div class="form-group" style="grid-column:1/-1"><label class="form-label">ФИО</label><input type="text" class="form-input" id="ne-name"></div></div>
     <div class="form-row cols-2">
       <div class="form-group"><label class="form-label">Должность</label><input type="text" class="form-input" id="ne-pos"></div>
+      <div class="form-group"><label class="form-label">Таб. номер</label><input type="text" class="form-input" id="ne-tab" placeholder="00000"></div>
+    </div>
+    <div class="form-row cols-2">
       <div class="form-group"><label class="form-label">Роль</label><select class="form-select" id="ne-role"><option value="worker">Работник</option><option value="master">Мастер</option></select></div>
     </div>
     <div class="modal-footer">
@@ -2089,7 +2092,32 @@ function renderEmployees(){
     return`<tr><td class="mono" style="color:var(--text3);font-size:11px">${e.tab||i+1}</td><td style="font-weight:500">${e.name}</td><td style="color:var(--text2);font-size:12px">${e.pos}</td><td><span class="badge ${e.role==='master'?'badge-yellow':e.role==='operator'?'badge-blue':'badge-blue'}">${e.role==='master'?'Мастер':e.role==='operator'?'Пультовик':'Работник'}</span></td><td><span class="badge ${e.status==='Активен'?'badge-green':e.status==='Отпуск'?'badge-yellow':'badge-red'}">${e.status}</span></td><td>${tb}</td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openEditEmployee(${i})" title="Редактировать">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delEmployee(${i})" title="Удалить">✕</button></td></tr>`;
   }).join('');
 }
-function saveEmployee(){const n=document.getElementById('ne-name').value.trim();if(!n)return;APP.employees.push({name:n,pos:document.getElementById('ne-pos').value,role:document.getElementById('ne-role').value,status:'Активен'});closeModal('modal-add-emp');renderEmployees();saveToFirebase('employees',APP.employees)}
+function saveEmployee(){
+  const n = document.getElementById('ne-name').value.trim();
+  const tab = document.getElementById('ne-tab') ? document.getElementById('ne-tab').value.trim() : '';
+  if(!n) return;
+  const newEmp = {name:n, pos:document.getElementById('ne-pos').value, tab:tab,
+    role:document.getElementById('ne-role').value, status:'Активен'};
+  APP.employees.push(newEmp);
+  
+  // Create training template for new employee
+  const TRAIN_TYPES = [{"type": "Медицинский осмотр", "years": 1}, {"type": "Психиатрическое освидетельствование", "years": 5}, {"type": "Противопожарный инструктаж", "years": 1}, {"type": "Основная профессия", "years": 1}, {"type": "ПСЖ", "years": 1}, {"type": "20 часовая программа", "years": 1}, {"type": "Охрана труда", "years": 1}, {"type": "Электробезопасность", "years": 1}, {"type": "ПДД", "years": 1}, {"type": "Сосуды под давлением", "years": 2}, {"type": "Высота", "years": 3}, {"type": "ПромБ", "years": 5}, {"type": "Оказание первой доврачебной помощи", "years": 3}, {"type": "ГНВП", "years": 2}, {"type": "Охрана труда программа А", "years": 3}, {"type": "СИЗ", "years": 1}, {"type": "Обращение с отходами", "years": 5}, {"type": "Обращение с кислотой", "years": 5}, {"type": "ГВС", "years": 5}];
+  TRAIN_TYPES.forEach(t=>{
+    APP.training.push({person:n, type:t.type, date:'', years:t.years});
+  });
+  
+  // Create vacation placeholders (3 slots)
+  APP.vacations.push({person:n, tab:tab, days:20, date:'', actual:'', note:'Запланировать'});
+  APP.vacations.push({person:n, tab:tab, days:20, date:'', actual:'', note:'Запланировать'});
+  APP.vacations.push({person:n, tab:tab, days:19, date:'', actual:'', note:'Запланировать'});
+  
+  closeModal('modal-add-emp');
+  renderEmployees();
+  fillAuthSelects();
+  saveToFirebase('employees', APP.employees);
+  saveToFirebase('training', APP.training);
+  saveToFirebase('vacations', APP.vacations);
+}
 
 // DOCS
 function renderDocs(){
@@ -2907,6 +2935,7 @@ function loadAllData(){
           // Keep code defaults as fallback for core collections
           if(col === 'employees'){
             // Keep APP.employees (code defaults) - needed for auth
+            fillAuthSelects(); // update auth lists even on null
           } else if(col === 'vacations'){
             // Keep APP.vacations (code defaults)
           } else if(col === 'training'){
@@ -4393,15 +4422,15 @@ function calcAutoFill(){
   calcSimple();
 }
 function fillAuthSelects(){
-  // Always start with AUTH_EMPLOYEES (hardcoded fallback)
-  // Merge with Firebase employees if they differ
-  let list = AUTH_EMPLOYEES;
+  // Primary: use Firebase employees (reflects master's changes)
+  // Fallback: use AUTH_EMPLOYEES only if Firebase hasn't loaded yet
+  let list;
   if(APP.employees && APP.employees.length > 0){
-    // Use Firebase list (master may have added/removed people)
-    // But always keep AUTH_EMPLOYEES entries so master can always login
-    const fbNames = APP.employees.map(e=>e.name);
-    const authOnly = AUTH_EMPLOYEES.filter(e=>!fbNames.includes(e.name));
-    list = [...APP.employees, ...authOnly];
+    // Firebase loaded - use exactly what master configured
+    list = APP.employees.filter(e=>e.status !== 'Уволен');
+  } else {
+    // Firebase not loaded yet - use hardcoded fallback
+    list = AUTH_EMPLOYEES;
   }
   const opts = list.map(e=>`<option value="${e.name}">${e.name} — ${e.pos}</option>`).join('');
   const ln = document.getElementById('login-name');
