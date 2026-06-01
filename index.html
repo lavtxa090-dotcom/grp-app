@@ -740,6 +740,329 @@ body{color-scheme:light}
     <div id="my-vacation-content"></div>
   </div>
 
+<div class="page" id="page-vacations">
+    <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center;flex-wrap:wrap">
+      <select class="form-select" style="width:180px" id="vac-filter-person" onchange="renderVacations()">
+        <option value="">Все сотрудники</option>
+      </select>
+      <select class="form-select" style="width:130px" id="vac-filter-month" onchange="renderVacations()">
+        <option value="">Все месяцы</option>
+        <option value="01">Январь</option><option value="02">Февраль</option>
+        <option value="03">Март</option><option value="04">Апрель</option>
+        <option value="05">Май</option><option value="06">Июнь</option>
+        <option value="07">Июль</option><option value="08">Август</option>
+        <option value="09">Сентябрь</option><option value="10">Октябрь</option>
+        <option value="11">Ноябрь</option><option value="12">Декабрь</option>
+      </select>
+      <select class="form-select" style="width:130px" id="vac-view" onchange="renderVacations()">
+        <option value="table">Таблица</option>
+        <option value="timeline">Хронология</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="openAddVac()">+ Добавить</button><button class="btn btn-primary btn-sm" onclick="exportVacations()">⬇ XLSX</button>
+    </div>
+    <div id="vac-content"></div>
+  </div>
+
+  <!-- MY VACATION (worker) -->
+
+<div class="page" id="page-sick-leaves">
+    <div id="sick-leaves-content"></div>
+  </div>
+
+
+<div class="modal-overlay" id="modal-sick-leave">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">🏥 Больничный лист</div>
+    <div id="sick-modal-body">
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">Дата открытия</label>
+          <input type="date" class="form-input" id="sl-date-start">
+        </div>
+        <div class="form-group">
+          <label class="form-label">№ листа нетрудоспособности</label>
+          <input type="text" class="form-input mono" id="sl-num" placeholder="необязательно">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label class="form-label">Примечание</label>
+        <input type="text" class="form-input" id="sl-note" placeholder="Диагноз, причина (необязательно)">
+      </div>
+      <div class="alert alert-blue" style="font-size:12px">ℹ️ Мастер получит уведомление об открытии больничного</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-sick-leave')">Отмена</button>
+      <button class="btn btn-primary" onclick="openSickLeave()" style="background:var(--red)">🏥 Открыть больничный</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-close-sick">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">Закрыть больничный</div>
+    <input type="hidden" id="csl-idx">
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Дата закрытия (выхода на работу)</label>
+      <input type="date" class="form-input" id="csl-date-end">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-close-sick')">Отмена</button>
+      <button class="btn btn-primary" onclick="closeSickLeaveConfirm()">Закрыть больничный</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-edit-emp">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">Редактировать сотрудника</div>
+    <input type="hidden" id="ee-idx">
+    <div class="form-row"><div class="form-group"><label class="form-label">ФИО</label><input type="text" class="form-input" id="ee-name"></div></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Должность</label><input type="text" class="form-input" id="ee-pos"></div>
+      <div class="form-group"><label class="form-label">Таб. номер</label><input type="text" class="form-input mono" id="ee-tab"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Роль</label>
+        <select class="form-select" id="ee-role">
+          <option value="worker">Работник</option>
+          <option value="operator">Пультовик</option>
+          <option value="master">Мастер</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Статус</label>
+        <select class="form-select" id="ee-status">
+          <option>Активен</option><option>Отпуск</option><option>Больничный</option><option>Уволен</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-emp')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveEditEmployee()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-edit-equip">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">Редактировать технику</div>
+    <input type="hidden" id="eqe-idx">
+    <div class="form-row"><div class="form-group"><label class="form-label">Наименование</label><input type="text" class="form-input" id="eqe-name"></div></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Гос. номер</label><input type="text" class="form-input" id="eqe-gov"></div>
+      <div class="form-group"><label class="form-label">Гараж. номер</label><input type="text" class="form-input" id="eqe-gar"></div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label class="form-label">A (л/ч)</label><input type="number" class="form-input mono" id="eqe-A"></div>
+      <div class="form-group"><label class="form-label">B (л/ч)</label><input type="number" class="form-input mono" id="eqe-B"></div>
+      <div class="form-group"><label class="form-label">C (л/ч)</label><input type="number" class="form-input mono" id="eqe-C"></div>
+    </div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Статус</label>
+      <select class="form-select" id="eqe-status"><option>Активна</option><option>Ремонт</option><option>Списана</option></select>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-equip')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveEditEquip()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-vac">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">Добавить отпуск</div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Сотрудник</label>
+      <select class="form-select" id="av-person"></select>
+    </div></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Дата начала</label><input type="date" class="form-input" id="av-date"></div>
+      <div class="form-group"><label class="form-label">Кол-во дней</label><input type="number" class="form-input mono" id="av-days" value="20"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Таб. номер</label><input type="text" class="form-input mono" id="av-tab"></div>
+      <div class="form-group"><label class="form-label">Примечание</label><input type="text" class="form-input" id="av-note"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-vac')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveAddVac()">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-moto">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">Добавить единицу техники</div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Наименование</label>
+      <select class="form-select" id="am-name">
+        <option value="">— Выбрать из реестра —</option>
+      </select>
+    </div></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Гос.№ тягача</label><input type="text" class="form-input mono" id="am-gov-t"></div>
+      <div class="form-group"><label class="form-label">Гар.№ тягача</label><input type="text" class="form-input mono" id="am-gar-t"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Гос.№ установки</label><input type="text" class="form-input mono" id="am-gov-u"></div>
+      <div class="form-group"><label class="form-label">Гар.№ установки</label><input type="text" class="form-input mono" id="am-gar-u"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-moto')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveAddMoto()">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-operator-shift">
+    <div id="operator-shift-content"></div>
+  </div>
+
+
+  <!-- SICK LEAVES MASTER PAGE -->
+
+<div class="modal-overlay" id="modal-edit-vac">
+  <div class="modal">
+    <div class="modal-title">Отпуск — <span id="ev-name"></span></div>
+    <input type="hidden" id="ev-idx">
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label class="form-label">Дата по плану</label>
+        <input type="date" class="form-input mono" id="ev-plan" readonly style="opacity:.6">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Кол-во дней</label>
+        <input type="number" class="form-input mono" id="ev-days">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Фактическая дата начала</label>
+      <input type="date" class="form-input mono" id="ev-actual">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Примечание</label>
+      <input type="text" class="form-input" id="ev-note" placeholder="Перенос, основание и т.д.">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-vac')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveVacEdit()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+  <!-- OPERATOR SHIFT PAGE -->
+  <div class="page" id="page-operator-shift">
+    <div id="operator-shift-content"></div>
+  </div>
+
+
+  <!-- SICK LEAVES MASTER PAGE -->
+  <div class="page" id="page-sick-leaves">
+    <div id="sick-leaves-content"></div>
+  </div>
+
+
+<div class="modal-overlay" id="modal-change-pass">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-title">🔑 Сменить пароль</div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Текущий пароль</label>
+      <input type="password" class="form-input" id="cp-old" placeholder="Введите текущий пароль">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Новый пароль</label>
+      <input type="password" class="form-input" id="cp-new" placeholder="Минимум 6 символов">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Повторите новый пароль</label>
+      <input type="password" class="form-input" id="cp-new2" placeholder="Повторите пароль">
+    </div>
+    <div id="cp-error" class="auth-error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-change-pass')">Отмена</button>
+      <button class="btn btn-primary" onclick="changePassword()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="modal-add-train">
+  <div class="modal">
+    <div class="modal-title">+ Добавить обучение</div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label class="form-label">Сотрудник</label>
+        <select class="form-select" id="at-person"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Вид обучения</label>
+        <select class="form-select" id="at-type">
+          <option>Медицинский осмотр</option>
+          <option>Психиатрическое освидетельствование</option>
+          <option>Противопожарный инструктаж</option>
+          <option>Основная профессия</option>
+          <option>ПСЖ</option>
+          <option>20 часовая программа</option>
+          <option>Охрана труда</option>
+          <option>Электробезопасность</option>
+          <option>Сосуды под давлением</option>
+          <option>Высота</option>
+          <option>ПромБ</option>
+          <option>Оказание первой доврачебной помощи</option>
+          <option>ГНВП</option>
+          <option>ПТМ</option>
+          <option>Обращение с отходами</option>
+          <option>Обращение с кислотой</option>
+          <option>Другое</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Дата</label>
+        <input type="date" class="form-input" id="at-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Срок (лет)</label>
+        <select class="form-select" id="at-years">
+          <option value="1">1 год</option>
+          <option value="2">2 года</option>
+          <option value="3">3 года</option>
+          <option value="5">5 лет</option>
+          <option value="99">Бессрочно</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-train')">Отмена</button>
+      <button class="btn btn-primary" onclick="addTraining()">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-edit-doc">
+  <div class="modal">
+    <div class="modal-title">✏️ Редактировать документ</div>
+    <input type="hidden" id="ed-idx">
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Название</label>
+      <input type="text" class="form-input" id="ed-name">
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label class="form-label">Дата истечения</label>
+        <input type="date" class="form-input" id="ed-exp">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Статус</label>
+        <select class="form-select" id="ed-status">
+          <option>Ожидает</option>
+          <option>Подписан</option>
+          <option>Истёк</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-doc')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveEditDoc()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div class="auth-screen hidden" id="auth-screen">
   <div class="auth-box">
     <div class="auth-logo">
@@ -4081,6 +4404,40 @@ goto = function(id){
 }
 
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initApp);}else{initApp();}
+
+function openAddTraining(){
+  const sel = document.getElementById('at-person');
+  if(sel) sel.innerHTML = APP.employees.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
+  const dateEl = document.getElementById('at-date');
+  if(dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+  openModal('modal-add-train');
+}
+
+function openEditDoc(i){
+  const d = APP.docs[i];
+  if(!d) return;
+  const idxEl = document.getElementById('ed-idx');
+  const nameEl = document.getElementById('ed-name');
+  const expEl = document.getElementById('ed-exp');
+  const statusEl = document.getElementById('ed-status');
+  if(idxEl) idxEl.value = i;
+  if(nameEl) nameEl.value = d.name||'';
+  if(expEl) expEl.value = d.exp||'';
+  if(statusEl) statusEl.value = d.status||'Ожидает';
+  openModal('modal-edit-doc');
+}
+
+function saveEditDoc(){
+  const i = parseInt(document.getElementById('ed-idx').value);
+  if(!APP.docs[i]) return;
+  APP.docs[i].name = document.getElementById('ed-name').value;
+  APP.docs[i].exp = document.getElementById('ed-exp').value;
+  APP.docs[i].status = document.getElementById('ed-status').value;
+  closeModal('modal-edit-doc');
+  renderDocs();
+  saveToFirebase('docs', APP.docs);
+}
+
 </script>
 
 
