@@ -2367,34 +2367,49 @@ function trainTab(t){
 }
 function renderTraining(){
   const fp=document.getElementById('train-fp');
-  if(fp.children.length<=1){APP.employees.forEach(e=>{const o=document.createElement('option');o.value=e.name;o.textContent=e.name;fp.appendChild(o)})}
-  document.getElementById('ta-person').innerHTML=APP.employees.map(e=>`<option>${e.name}</option>`).join('');
+  if(fp){
+    const cur = fp.value;
+    fp.innerHTML='<option value="">Все сотрудники</option>'+APP.employees.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
+    if(cur) fp.value=cur;
+  }
+  const ta=document.getElementById('ta-person');
+  if(ta) ta.innerHTML=APP.employees.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
   renderTrainList();
 }
 
 
-// Force seed - can be called from console: forceSeedData()
+// Force seed - called from ⬆ button in sidebar
 function forceSeedData(){
-  if(!db || !auth || !auth.currentUser){ alert('Войдите как мастер'); return; }
-  if(APP.role !== 'master'){ alert('Только для мастера'); return; }
-  const cols = {
-    employees: APP.employees,
-    training: APP.training,
-    vacations: APP.vacations,
-  };
+  if(!db || !auth){ 
+    showToast('Firebase ещё не готов, подождите...', 'red');
+    setTimeout(forceSeedData, 2000);
+    return; 
+  }
+  if(!auth.currentUser){ showToast('Войдите как мастер', 'red'); return; }
+  if(APP.role !== 'master'){ showToast('Только для мастера', 'red'); return; }
+  
+  const btn = document.getElementById('seed-btn');
+  if(btn){ btn.textContent = '⏳'; btn.disabled = true; }
+  
+  const cols = ['employees','training','vacations','equipment','docs','motoData'];
   let done = 0;
-  const total = Object.keys(cols).length;
-  Object.entries(cols).forEach(([col, data]) => {
+  cols.forEach(col => {
+    const data = APP[col];
     if(data && data.length > 0){
-      db.ref(col).set(data).then(()=>{
-        done++;
-        if(done === total){
-          db.ref('_initialized').set(true);
-          alert('✅ Данные успешно загружены в Firebase!\nОбучений: ' + (APP.training||[]).length + '\nОтпусков: ' + (APP.vacations||[]).length);
-          refreshCurrentPage('training');
-          refreshCurrentPage('vacations');
-        }
-      }).catch(e => alert('Ошибка: ' + e.message));
+      db.ref(col).set(data)
+        .then(()=>{
+          done++;
+          if(done === cols.length){
+            db.ref('_initialized').set(true);
+            if(btn){ btn.textContent = '✅'; setTimeout(()=>{ btn.textContent='⬆'; btn.disabled=false; }, 2000); }
+            showToast('✅ Данные загружены! Обучений: ' + APP.training.length + ', Отпусков: ' + APP.vacations.length, 'green');
+            cols.forEach(c => refreshCurrentPage(c));
+          }
+        })
+        .catch(e => {
+          if(btn){ btn.textContent='❌'; btn.disabled=false; }
+          showToast('Ошибка: ' + e.message, 'red');
+        });
     } else { done++; }
   });
 }
@@ -2417,7 +2432,7 @@ function renderTrainList(){
   let list=APP.training;
   if(fp)list=list.filter(t=>t.person===fp);
   if(fs)list=list.filter(t=>trainStatus(t).status===fs);
-  list=list.slice(0,120);
+  list=list.slice(0,fp ? 500 : 120);
   document.getElementById('train-list-body').innerHTML=list.map(t=>{
     const st=trainStatus(t);const ri=APP.training.indexOf(t);
     const cls=st.status==='exp'?'badge-red':st.status==='soon'?'badge-yellow':'badge-green';
@@ -2536,6 +2551,9 @@ function buildNav(role){
       <div class="nav-section">Отчёты</div>
       <div class="nav-item" onclick="goto('reports')"><span class="icon">📁</span> Отчёты</div>
     `;
+    // Show seed button for master
+    const seedBtn = document.getElementById('seed-btn');
+    if(seedBtn) seedBtn.style.display = 'flex';
   } else if(role==='operator'){
     nav.innerHTML=`
       <div class="nav-section">Пультовик</div>
