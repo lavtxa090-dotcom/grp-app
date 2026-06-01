@@ -495,17 +495,10 @@ body{color-scheme:light}
     </div>
     <div class="section">
       <div class="section-header">
-        <div class="section-title">Сертификаты и допуски</div>
-        <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openMyTrainingModal()">+ Добавить</button>
+        <div class="section-title">📋 Сертификаты и допуски</div>
       </div>
-      <div class="section-body">
-        <table class="data-table">
-          <thead><tr><th>Обучение</th><th>Дата</th><th>Статус</th><th>Дней</th><th></th></tr></thead>
-          <tbody id="my-train-body"></tbody>
-        </table>
-      </div>
+      <div class="section-body" style="padding:0" id="my-train-body"></div>
     </div>
-  </div>
 
   <!-- MOTO -->
   <div class="page" id="page-moto">
@@ -2466,8 +2459,18 @@ function renderMatrix(){
     }).join('')}</tr>`).join('')}</tbody>`;
 }
 function openTrainEdit(idx){const t=APP.training[idx];document.getElementById('et-idx').value=idx;document.getElementById('et-person').value=t.person;document.getElementById('et-type').value=t.type;document.getElementById('et-date').value=t.date;openModal('modal-edit-training')}
-function saveTrainingEdit(){const idx=parseInt(document.getElementById('et-idx').value);APP.training[idx].date=document.getElementById('et-date').value;closeModal('modal-edit-training');if(trainTabCur==='list')renderTrainList();if(trainTabCur==='matrix')renderMatrix()
-  saveToFirebase('training',APP.training);}
+function saveTrainingEdit(){
+  const tidx=parseInt(document.getElementById('et-idx').value);
+  APP.training[tidx].date=document.getElementById('et-date').value;
+  closeModal('modal-edit-training');
+  renderTrainList();
+  if(typeof renderMatrix==='function') renderMatrix();
+  renderEmployees();
+  renderDashboard();
+  if(db && auth && auth.currentUser){
+    db.ref('training').set(APP.training).catch(e=>console.error(e));
+  }
+}
 function addTraining(){
   const p=document.getElementById('ta-person').value;
   const type=document.getElementById('ta-type').value.trim();
@@ -2965,8 +2968,12 @@ function loadAllData(){
         if(data === null){
           // Keep code defaults as fallback for core collections
           if(col === 'employees'){
-            // Keep APP.employees (code defaults) - needed for auth
-            fillAuthSelects(); // update auth lists even on null
+            fillAuthSelects();
+            if(APP.employees && APP.employees.length > 0){
+              const activeNames = new Set(APP.employees.map(e=>e.name));
+              APP.vacations = APP.vacations.filter(v=>activeNames.has(v.person));
+              APP.training = APP.training.filter(t=>activeNames.has(t.person));
+            }
             // Filter vacations and training to only active employees
             if(APP.employees && APP.employees.length > 0){
               const _active = new Set(APP.employees.map(e=>e.name));
@@ -2991,8 +2998,8 @@ function loadAllData(){
             APP[col] = [];
           }
         }
-        // Data loaded from Firebase
-        refreshCurrentPage(col);
+        // Data loaded from Firebase - defer to avoid race with local updates
+        setTimeout(()=>refreshCurrentPage(col), 100);
       });
     });
   }).catch(err=>{
@@ -3009,7 +3016,7 @@ function loadAllData(){
             APP[col]=keys.map(k=>data[k]).filter(v=>v!=null);
           }
         } else { APP[col]=[]; }
-        refreshCurrentPage(col);
+        setTimeout(()=>refreshCurrentPage(col), 100);
       });
     });
   });
