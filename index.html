@@ -888,7 +888,7 @@ function renderFuel(){
   const list=APP.fuelLog.filter(f=>f.date.startsWith(APP.period));
   const tot=list.reduce((s,f)=>s+f.liters,0);
   document.getElementById('fuel-total-label').textContent='Итого: '+tot.toLocaleString()+' л';
-  document.getElementById('fuel-table').innerHTML=list.map((f)=>`<tr><td class="mono" style="font-size:12px">${fmt(f.date)}</td><td>${f.unit}</td><td class="mono" style="color:var(--accent)">${f.liters}</td><td style="color:var(--text2);font-size:12px">${f.operator}</td><td><button class="btn-icon btn-sm" onclick="delFuel(APP.fuelLog.indexOf(f))">✕</button></td></tr>`).join('');
+  document.getElementById('fuel-table').innerHTML=list.map((f)=>{const ri=APP.fuelLog.indexOf(f);return`<tr><td class="mono" style="font-size:12px">${fmt(f.date)}</td><td>${f.unit}</td><td class="mono" style="color:var(--accent)">${f.liters}</td><td style="color:var(--text2);font-size:12px">${f.operator}</td><td><button class="btn-icon btn-sm" onclick="delFuel(${ri})">✕</button></td></tr>`}).join('');
 }
 function addFuel(){const d=document.getElementById('f-date').value,u=document.getElementById('f-unit').value,l=parseFloat(document.getElementById('f-liters').value)||0,op=document.getElementById('f-operator').value;if(!d||!l)return alert('Заполните дату и литры');APP.fuelLog.push({date:d,unit:u,liters:l,operator:op});renderFuel();renderDashboard()
   saveToFirebase('fuelLog', APP.fuelLog);
