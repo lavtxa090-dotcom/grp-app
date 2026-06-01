@@ -2020,6 +2020,46 @@ function renderTraining(){
   document.getElementById('ta-person').innerHTML=APP.employees.map(e=>`<option>${e.name}</option>`).join('');
   renderTrainList();
 }
+
+
+// Force seed - can be called from console: forceSeedData()
+function forceSeedData(){
+  if(!db || !auth || !auth.currentUser){ alert('Войдите как мастер'); return; }
+  if(APP.role !== 'master'){ alert('Только для мастера'); return; }
+  const cols = {
+    employees: APP.employees,
+    training: APP.training,
+    vacations: APP.vacations,
+  };
+  let done = 0;
+  const total = Object.keys(cols).length;
+  Object.entries(cols).forEach(([col, data]) => {
+    if(data && data.length > 0){
+      db.ref(col).set(data).then(()=>{
+        done++;
+        if(done === total){
+          db.ref('_initialized').set(true);
+          alert('✅ Данные успешно загружены в Firebase!\nОбучений: ' + (APP.training||[]).length + '\nОтпусков: ' + (APP.vacations||[]).length);
+          refreshCurrentPage('training');
+          refreshCurrentPage('vacations');
+        }
+      }).catch(e => alert('Ошибка: ' + e.message));
+    } else { done++; }
+  });
+}
+
+function trainStatus(t){
+  if(!t||!t.date) return {status:'unknown',label:'—',color:'gray'};
+  const exp = new Date(t.date);
+  if(t.years && t.years < 99) exp.setFullYear(exp.getFullYear() + t.years);
+  const now = new Date();
+  const diff = Math.round((exp - now) / (1000*60*60*24));
+  if(t.years >= 99) return {status:'ok', label:'Бессрочно', color:'green', days:9999};
+  if(diff < 0) return {status:'exp', label:'ИСТЕКЛО', color:'red', days:diff};
+  if(diff < 90) return {status:'soon', label:'СКОРО '+diff+'д', color:'orange', days:diff};
+  return {status:'ok', label:'ОК', color:'green', days:diff};
+}
+
 function renderTrainList(){
   const fp=document.getElementById('train-fp').value;
   const fs=document.getElementById('train-fs').value;
@@ -2545,7 +2585,17 @@ function loadAllData(){
           if(col === 'employees'){
             // Keep APP.employees (code defaults) - needed for auth
           } else if(col === 'vacations'){
-            // Keep APP.vacations (code defaults with 69 entries)
+            // Keep APP.vacations (code defaults)
+          } else if(col === 'training'){
+            // Keep APP.training (code defaults with 369 records)
+            // Auto-seed to Firebase if master
+            if(APP.role === 'master' && APP.training && APP.training.length > 0 && db && auth && auth.currentUser){
+              setTimeout(()=>{
+                db.ref('training').set(APP.training).catch(e=>console.warn('seed training:', e));
+                db.ref('vacations').set(APP.vacations).catch(e=>console.warn('seed vacations:', e));
+                db.ref('_initialized').set(true).catch(e=>console.warn('seed init:', e));
+              }, 1000);
+            }
           } else {
             APP[col] = [];
           }
