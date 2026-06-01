@@ -16,7 +16,7 @@
 <style>
 :root{--bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8f0fe;--bg4:#dde8fb;--border:#c5d5ea;--border2:#a8bcd8;--text:#0d1b2a;--text2:#4a6080;--text3:#8aa0b8;--accent:#1b379e;--accent2:#2347c0;--red:#dc2626;--green:#16a34a;--blue:#1b379e;--purple:#7c3aed;--orange:#ea580c;--font-h:'Oswald',sans-serif;--font-b:'IBM Plex Sans',sans-serif;--font-m:'IBM Plex Mono',monospace}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html,html{height:100%}body{height:100%;display:flex;overflow:hidden;}
 body{background:var(--bg);color:var(--text);font-family:var(--font-b);font-size:14px;display:flex;overflow:hidden;height:100vh;width:100vw}
 .sidebar{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);box-shadow:2px 0 8px rgba(0,0,0,.06);display:flex;flex-direction:column;height:100vh;overflow:hidden;flex-shrink:0;position:sticky;top:0}
 .sidebar-logo{padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#1b1fbe 0%,#1519a0 100%)}
@@ -37,10 +37,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);font-size:
 .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;font-family:var(--font-m)}
 .nav-badge.warn{background:rgba(27,55,158,.15);color:var(--accent)}
 .sidebar-bottom{padding:12px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);font-family:var(--font-m);background:var(--bg3)}
-.main{display:flex;flex-direction:column;align-items:center;flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .topbar{background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.06);padding:0 24px;height:52px;display:flex;align-items:center;gap:16px;flex-shrink:0}
 .topbar-title{font-family:var(--font-h);font-size:18px;font-weight:600;letter-spacing:1px;color:var(--text)}
-.page{max-width:1200px;width:100%;margin:0 auto;display:none;overflow-y:auto;overflow-x:auto;padding:24px;box-sizing:border-box}
+.page{display:none;overflow-y:auto;overflow-x:auto;padding:24px;box-sizing:border-box}
 .page.active{display:flex;flex-direction:column;flex:1;overflow-y:auto;min-width:0}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;min-width:0}
 .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)}
@@ -2210,7 +2210,8 @@ let pjdItems=[{start:0,end:250},{start:0,end:250}];
 function addPjd(){pjdItems.push({start:0,end:0});renderPjdList()}
 function removePjd(i){pjdItems.splice(i,1);renderPjdList();calcCalc()}
 function renderPjdList(){
-  document.getElementById('pjd-list').innerHTML=pjdItems.map((p,i)=>`
+  const pjdEl=document.getElementById('pjd-list');if(!pjdEl)return;
+  pjdEl.innerHTML=pjdItems.map((p,i)=>`
     <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:end">
       <div class="form-group"><label class="form-label">ПЖД ${i+1} нач.</label><input type="number" class="form-input mono" value="${p.start}" oninput="pjdItems[${i}].start=parseFloat(this.value)||0;calcCalc()"></div>
       <div class="form-group"><label class="form-label">Кон.</label><input type="number" class="form-input mono" value="${p.end}" oninput="pjdItems[${i}].end=parseFloat(this.value)||0;calcCalc()"></div>
@@ -4474,7 +4475,7 @@ function fillAuthSelects(){
 
 function initApp(){
   document.getElementById('sl-date-start') && (document.getElementById('sl-date-start').value = new Date().toISOString().split('T')[0]);
-  renderPjdList();calcSimple();calcCalc();renderCalcHistory();
+  try{renderPjdList();calcSimple();calcCalc();renderCalcHistory();}catch(e){console.warn('initApp calc error:',e)}
   fillAuthSelects();
   // Show auth screen initially (Firebase will hide it if user is logged in)
   const as = document.getElementById('auth-screen');
@@ -4490,7 +4491,7 @@ goto = function(id){
   if(pg) pg.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')===`goto('${id}')`)n.classList.add('active')});
   const allTitles={...titles, 'worker-home':'Моя главная', 'my-training':'Моё обучение', 'vacations':'График отпусков', 'my-vacation':'Мой отпуск','operator-shift':'Вахта / Заправки','sick-leaves':'Больничные листы'};
-  document.getElementById('page-title').textContent=allTitles[id]||id;
+  const ptEl=document.getElementById('page-title');if(ptEl)ptEl.textContent=allTitles[id]||id;
   const fn={dashboard:renderDashboard,employees:renderEmployees,docs:renderDocs,fuel:renderFuel,moto:renderMoto,training:renderTraining,equipment:renderEquipment,reports:renderReports,'worker-home':renderWorkerHome,'my-training':renderMyTraining,vacations:renderVacations,'my-vacation':renderMyVacation,'operator-shift':renderOperatorShift,'sick-leaves':renderSickLeaves,calc:()=>{renderCalcHistory();initCalcSelects()},'worker-fuel':renderWorkerFuel};
   if(fn[id])setTimeout(()=>fn[id](),0);
 }
