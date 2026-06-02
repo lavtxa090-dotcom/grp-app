@@ -497,8 +497,14 @@ body{color-scheme:light}
       <div class="section-header">
         <div class="section-title">📋 Сертификаты и допуски</div>
       </div>
-      <div class="section-body" style="padding:0" id="my-train-body"></div>
+      <div class="section-body" style="padding:0">
+        <table class="data-table">
+          <thead><tr><th>Обучение</th><th>Дата</th><th>Статус</th><th>Дней</th><th></th></tr></thead>
+          <tbody id="my-train-body"></tbody>
+        </table>
+      </div>
     </div>
+  </div>
 
   <!-- MOTO -->
   <div class="page" id="page-moto">
@@ -639,7 +645,6 @@ body{color-scheme:light}
       </div>
     </div>
   </div>
-</div>
 
 <!-- MODALS -->
 <div class="modal-overlay" id="modal-add-emp">
@@ -950,16 +955,8 @@ body{color-scheme:light}
   </div>
 </div>
 
-  <!-- OPERATOR SHIFT PAGE -->
-  <div class="page" id="page-operator-shift">
-    <div id="operator-shift-content"></div>
-  </div>
 
 
-  <!-- SICK LEAVES MASTER PAGE -->
-  <div class="page" id="page-sick-leaves">
-    <div id="sick-leaves-content"></div>
-  </div>
 
 
 <div class="modal-overlay" id="modal-change-pass">
@@ -1118,6 +1115,7 @@ body{color-scheme:light}
     </div>
   </div>
   <div style="margin-top:20px;font-size:11px;color:var(--text3);font-family:var(--font-m)">v2.0 · ПНП / ГРП</div>
+</div>
 </div>
 
 <script>
@@ -2285,21 +2283,34 @@ function renderCalcHistory(){
 
 // MOTO
 let motoViewMode='worker';
+function getMotoRecord(equipName){
+  let rec = APP.motoData.find(m=>m.name===equipName);
+  if(!rec){
+    rec = {name:equipName, km:'', mh_tractor:'', mh_unit:'', status:'В наличии',
+           gov_tractor:'', gar_tractor:'', gov_unit:'', gar_unit:''};
+    APP.motoData.push(rec);
+  }
+  return rec;
+}
 function renderMoto(){
   const sel=document.getElementById('moto-unit-select');
-  // Use equipment list as source of truth (synced via Firebase)
-  const units = APP.equipment.length > 0 ? APP.equipment : APP.motoData;
-  sel.innerHTML=units.map((m,i)=>{
-    const name = m.name||m.gov_tractor||'Единица '+i;
-    const gov = m.gov||m.gov_tractor||'';
-    const gar = m.gar||m.gar_tractor||'';
-    return `<option value="${i}">${name}${gov?' — '+gov:''}${gar?' (гар. '+gar+')':''}`;
-  }).join('');
-  // Hide master controls for workers
+  const units = APP.equipment || [];
+  if(sel){
+    sel.innerHTML = units.length
+      ? units.map((m,i)=>{
+          const gov=m.gov?' — '+m.gov:'';
+          const gar=m.gar?' (гар. '+m.gar+')':'';
+          return `<option value="${i}">${m.name}${gov}${gar}</option>`;
+        }).join('')
+      : '<option value="">Нет техники в реестре</option>';
+  }
   const masterBtns = document.getElementById('moto-master-btns');
   if(masterBtns) masterBtns.style.display = APP.role==='master' ? 'flex' : 'none';
-  if(APP.role !== 'master'){
-    motoView('worker');
+  if(APP.role !== 'master'){ motoView('worker'); }
+  if(units.length){ renderMotoCard(); }
+  else {
+    const b=document.getElementById('moto-card-body');
+    if(b) b.innerHTML='<div style="color:var(--text3);text-align:center;padding:30px 0">Нет техники в реестре. Обратитесь к мастеру.</div>';
   }
 }
 function motoView(v){
@@ -2309,34 +2320,56 @@ function motoView(v){
   if(v==='master')renderMotoMaster();
 }
 function renderMotoCard(){
-  const i=parseInt(document.getElementById('moto-unit-select').value);
-  const m=APP.motoData[i];
-  document.getElementById('moto-card-body').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-      <div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-family:var(--font-m)">Тягач — ${m.gov_tractor} (гар. ${m.gar_tractor})</div>
-        <div class="form-group" style="margin-bottom:10px"><label class="form-label">Пробег (км)</label><input type="number" class="form-input mono" value="${m.km}" oninput="APP.motoData[${i}].km=this.value"></div>
-        <div class="form-group"><label class="form-label">Моточасы</label><input type="number" class="form-input mono" value="${m.mh_tractor}" oninput="APP.motoData[${i}].mh_tractor=this.value"></div>
-      </div>
-      <div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-family:var(--font-m)">Установка — ${m.gov_unit} (гар. ${m.gar_unit})</div>
-        <div class="form-group" style="margin-bottom:10px"><label class="form-label">Моточасы</label><input type="number" class="form-input mono" value="${m.mh_unit}" oninput="APP.motoData[${i}].mh_unit=this.value"></div>
-        <div class="form-group"><label class="form-label">Статус</label>
-          <select class="form-select" onchange="APP.motoData[${i}].status=this.value;saveToFirebase('motoData',APP.motoData)">
-            <option ${m.status==='В наличии'?'selected':''}>В наличии</option>
-            <option ${m.status==='Не работает'?'selected':''}>Не работает</option>
-            <option ${m.status==='Отсутствует'?'selected':''}>Отсутствует</option>
-          </select>
-        </div>
-      </div>
+  const sel=document.getElementById('moto-unit-select');
+  const body=document.getElementById('moto-card-body');
+  if(!sel||!body) return;
+  if(sel.value===''){ body.innerHTML='<div style="color:var(--text3);text-align:center;padding:30px 0">Выберите технику</div>'; return; }
+  const eqIdx=parseInt(sel.value);
+  const eq=APP.equipment[eqIdx];
+  if(!eq){ body.innerHTML='<div style="color:var(--text3);text-align:center;padding:30px 0">Выберите технику</div>'; return; }
+  const m=getMotoRecord(eq.name);
+  const mi=APP.motoData.indexOf(m);
+  const date=document.getElementById('moto-date')?document.getElementById('moto-date').value:'';
+  const mh=m.mh_unit||m.mh_tractor||'';
+  body.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);font-family:var(--font-m);margin-bottom:14px">
+      ${eq.name}${eq.gov?' · '+eq.gov:''}${eq.gar?' · гар. '+eq.gar:''}${date?' · отчётная дата '+fmt(date):''}
+      ${m.updatedAt?'<br>Последняя запись: '+fmt(m.updatedAt)+(m.updatedBy?' ('+m.updatedBy+')':''):''}
     </div>
-    <div style="margin-top:14px">
-      <button class="btn btn-primary" onclick="APP.motoData[${i}].filled=true;saveToFirebase('motoData',APP.motoData);if(motoViewMode==='master')renderMotoMaster();alert('Данные сохранены')">✅ Подтвердить</button>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Пробег (км)</label>
+        <input type="number" class="form-input mono" value="${m.km||''}" placeholder="0"
+          oninput="APP.motoData[${mi}].km=this.value"></div>
+      <div class="form-group"><label class="form-label">Моточасы</label>
+        <input type="number" class="form-input mono" value="${mh}" placeholder="0"
+          oninput="APP.motoData[${mi}].mh_unit=this.value"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label class="form-label">Статус</label>
+        <select class="form-select" onchange="APP.motoData[${mi}].status=this.value">
+          <option ${m.status==='В наличии'?'selected':''}>В наличии</option>
+          <option ${m.status==='Не работает'?'selected':''}>Не работает</option>
+          <option ${m.status==='Отсутствует'?'selected':''}>Отсутствует</option>
+        </select>
+      </div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn btn-primary" style="margin-top:auto" onclick="saveMotoCard(${mi})">✅ Сохранить</button>
+      </div>
     </div>`;
+}
+function saveMotoCard(mi){
+  const m=APP.motoData[mi];
+  if(!m) return;
+  m.updatedBy=APP.currentUser;
+  m.updatedAt=(document.getElementById('moto-date')&&document.getElementById('moto-date').value)||new Date().toISOString().split('T')[0];
+  m.filled=true;
+  saveToFirebase('motoData',APP.motoData);
+  if(motoViewMode==='master'&&document.getElementById('moto-master-body')) renderMotoMaster();
+  showToast('✅ Моточасы сохранены','green');
 }
 function renderMotoMaster(){
   const filled=APP.motoData.filter(m=>m.km||m.mh_tractor||m.mh_unit).length;
-  const pct=Math.round(filled/APP.motoData.length*100);
+  const pct=APP.motoData.length?Math.round(filled/APP.motoData.length*100):0;
   document.getElementById('moto-fill-pct').textContent=pct+'%';
   document.getElementById('moto-fill-bar').style.width=pct+'%';
   document.getElementById('moto-master-body').innerHTML=APP.motoData.map((m,i)=>`<tr><td class="mono" style="color:var(--text3)">${i+1}</td><td>${m.name}<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-m)">${m.gov_tractor}</span></td><td class="mono">${m.km||'—'}</td><td class="mono">${m.mh_tractor||'—'}</td><td style="font-size:12px;color:var(--text2);font-family:var(--font-m)">${m.gov_unit}</td><td class="mono">${m.mh_unit||'—'}</td><td><span class="badge ${m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray'}">${m.status}</span></td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openMotoEdit(${i})">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delMotoUnit(${i})">✕</button></td></tr>`).join('');
@@ -3314,20 +3347,13 @@ function gotoMotoUnit(idx){
 }
 
 function gotoMotoEquip(equipIdx){
-  // Find matching motoData entry or use equipment name
   const eq = APP.equipment[equipIdx];
   if(!eq) return;
   goto('moto');
   setTimeout(()=>{
     const sel = document.getElementById('moto-unit-select');
     if(!sel) return;
-    // Try to find by name
-    const motoIdx = APP.motoData.findIndex(m=>m.name===eq.name || m.gov_tractor===eq.gov);
-    if(motoIdx>=0){
-      sel.value = motoIdx;
-    } else {
-      sel.value = 0;
-    }
+    sel.value = equipIdx;
     renderMotoCard();
   },50);
 }
@@ -3561,7 +3587,7 @@ function renderMyVacation(){
   const today = new Date();
 
   if(myVacs.length===0){
-    document.getElementById('my-vac-content').innerHTML = `
+    document.getElementById('my-vacation-content').innerHTML = `
       <div class="section"><div class="section-body" style="text-align:center;padding:40px;color:var(--text3)">
         График отпусков для вас не найден<br>
         <span style="font-size:12px">Обратитесь к мастеру</span>
@@ -3625,7 +3651,7 @@ function renderMyVacation(){
     </div>
   </div>`;
 
-  document.getElementById('my-vac-content').innerHTML = html;
+  document.getElementById('my-vacation-content').innerHTML = html;
 }
 
 function exportVacations(){
@@ -3717,15 +3743,29 @@ function renderOperatorShift(){
         <div class="section">
           <div class="section-header"><div class="section-title">⚙️ Параметры вахты</div></div>
           <div class="section-body">
-            <div class="form-row" style="grid-template-columns:1fr">
+            <div class="form-row cols-2">
               <div class="form-group">
                 <label class="form-label">Дата начала вахты</label>
                 <input type="date" class="form-input" id="sh-date-start" value="${new Date().toISOString().split('T')[0]}">
               </div>
             </div>
-
+            <div class="form-row cols-3">
+              <div class="form-group"><label class="form-label">Норма A — нагрузка (л/ч)</label><input type="number" class="form-input mono" id="sh-A" value="130"></div>
+              <div class="form-group"><label class="form-label">Норма B — холостой (л/ч)</label><input type="number" class="form-input mono" id="sh-B" value="23"></div>
+              <div class="form-group"><label class="form-label">Норма C — ПЖД (л/ч)</label><input type="number" class="form-input mono" id="sh-C" value="4"></div>
+            </div>
           </div>
         </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">🔧 Установки на вахте</div>
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="addShiftUnit()">+ Добавить установку</button>
+          </div>
+          <div class="section-body">
+            <div id="sh-units-list">${buildShiftUnitsHTML()}</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:14px" onclick="startShift()">▶ Начать вахту</button>
       </div>`;
   } else {
     renderActiveShift(shift);
