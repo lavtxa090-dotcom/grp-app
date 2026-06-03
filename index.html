@@ -558,6 +558,7 @@ body{color-scheme:light}
         <select class="form-select" style="width:auto" id="train-fs" onchange="renderTrainList()">
           <option value="">Все статусы</option><option value="ok">Действующие</option><option value="soon">Скоро истекает</option><option value="exp">Истекло</option>
         </select>
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="ensureBaseTrainings()" title="Добавить недостающие базовые обучения всем сотрудникам (без дат)">➕ Базовые обучения всем</button>
       </div>
       <div class="section"><div class="section-body">
         <table class="data-table"><thead><tr><th>Сотрудник</th><th>Обучение</th><th>Дата</th><th>Статус</th><th>Дней</th><th></th></tr></thead><tbody id="train-list-body"></tbody></table>
@@ -2562,6 +2563,68 @@ const MATRIX_COLS = [
   {head:'УМО', match:'УМО', period:'1 раз в 2 года', years:2},
   {head:'ВОЗ', match:'ВОЗ', period:'1 раз в год', years:1},
 ];
+
+// ============ БАЗОВЫЕ ОБУЧЕНИЯ (общие для всех сотрудников) ============
+const BASE_TRAININGS = [
+  {type:'Медицинский осмотр', years:1},
+  {type:'Психиатрическое  освидетельствование', years:5},
+  {type:'Противопожарный инструктаж', years:1},
+  {type:'ПСЖ', years:1},
+  {type:'20 часовая  программа', years:1},
+  {type:'Электробезопасность', years:1},
+  {type:'ПДД', years:1},
+  {type:'Сосуды под давлением', years:1},
+  {type:'Высота', years:1},
+  {type:'Оказание первой доврачебной помощи', years:3},
+  {type:'Сосуды под давлением', years:99},
+  {type:'ГНВП', years:2},
+  {type:'Высота  1,2 группа', years:3},
+  {type:'Охрана труда  программа Б (Безопасные методы и при', years:3},
+  {type:'Охрана труда  программа В ( Безопасные методы и пр', years:1},
+  {type:'СИЗ', years:3},
+  {type:'Защитное вождение', years:1},
+  {type:'Пропуск  ГПН-Заполярье', years:1},
+  {type:'Корь прививка №1', years:99},
+  {type:'Корь прививка №2', years:99},
+];
+
+function ensureBaseTrainings(){
+  if(APP.role!=='master'){ showToast('Только для мастера','red'); return; }
+  const norm = x => (x||'').toString().toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
+  const hasRec = (person, item) => {
+    const ni = norm(item.type);
+    return APP.training.some(t=>{
+      if(t.person!==person) return false;
+      if(norm(t.type)!==ni) return false;
+      if(ni==='сосуды под давлением') return item.years>=99 ? (t.years>=99) : (t.years<99);
+      return true;
+    });
+  };
+  const emps = APP.employees.filter(e=>e.status!=='Уволен');
+  let added=0, affected=0;
+  emps.forEach(emp=>{
+    let empAdded=0;
+    BASE_TRAININGS.forEach(item=>{
+      if(!hasRec(emp.name, item)){
+        APP.training.push({person:emp.name, type:item.type, date:'', years:item.years});
+        added++; empAdded++;
+      }
+    });
+    if(empAdded) affected++;
+  });
+  if(added===0){ showToast('У всех сотрудников базовые обучения уже есть','green'); return; }
+  if(!confirm('Будет добавлено '+added+' пустых записей обучений для '+affected+' сотрудников (без дат — проставите сами). Продолжить?')){
+    // откатываем, если отказались
+    APP.training.splice(APP.training.length-added, added);
+    return;
+  }
+  saveToFirebase('training', APP.training);
+  if(typeof renderTraining==='function') renderTraining();
+  if(typeof renderMatrix==='function') renderMatrix();
+  renderEmployees();
+  renderDashboard();
+  showToast('✅ Добавлено '+added+' записей для '+affected+' сотрудников. Проставьте даты.','green');
+}
 
 async function exportTrainingMatrix(){
   if(typeof ExcelJS==='undefined') return alert('ExcelJS ещё не загрузился — обновите страницу и повторите');
