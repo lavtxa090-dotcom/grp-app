@@ -2062,31 +2062,33 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 
 // DASHBOARD
 function renderDashboard(){
+  const $=id=>document.getElementById(id);
+  const setTxt=(id,v)=>{const el=$(id); if(el) el.textContent=v;};
+  const setHtml=(id,v)=>{const el=$(id); if(el) el.innerHTML=v;};
   const pFuel=APP.fuelLog.filter(f=>f.date.startsWith(APP.period));
   const tot=pFuel.reduce((s,f)=>s+f.liters,0);
-  document.getElementById('d-fuel').textContent=tot.toLocaleString();
-  document.getElementById('d-equip').textContent=APP.equipment.filter(e=>e.status==='Активна').length;
-  if(document.getElementById('d-emp-count'))document.getElementById('d-emp-count').textContent=APP.employees.length;
+  setTxt('d-fuel', tot.toLocaleString());
+  setTxt('d-equip', APP.equipment.filter(e=>e.status==='Активна').length);
+  setTxt('d-emp-count', APP.employees.length);
   const expC=APP.training.filter(t=>trainStatus(t).status==='exp').length;
   const soonC=APP.training.filter(t=>trainStatus(t).status==='soon').length;
-  document.getElementById('d-exp').textContent=expC;
-  document.getElementById('ds-fill').textContent=tot.toLocaleString()+' л';
-  document.getElementById('ds-count').textContent=pFuel.length;
-  document.getElementById('ds-calcs').textContent=APP.calcHistory.length;
-  document.getElementById('ds-recent').innerHTML=pFuel.slice(-3).reverse().map(f=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>${fmt(f.date)} — ${f.unit}</span><span style="font-family:var(--font-m);color:var(--accent)">${f.liters} л</span></div>`).join('')||'<div style="color:var(--text3)">Нет данных</div>';
+  setTxt('d-exp', expC);
+  setTxt('ds-fill', tot.toLocaleString()+' л');
+  setTxt('ds-count', pFuel.length);
+  setTxt('ds-calcs', APP.calcHistory.length);
+  setHtml('ds-recent', pFuel.slice(-3).reverse().map(f=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>${fmt(f.date)} — ${f.unit}</span><span style="font-family:var(--font-m);color:var(--accent)">${f.liters} л</span></div>`).join('')||'<div style="color:var(--text3)">Нет данных</div>');
   const alerts=[];
   if(expC>0)alerts.push(`<div class="alert alert-red">🎓 ${expC} обучений истекло — требуется продление</div>`);
   if(soonC>0)alerts.push(`<div class="alert alert-yellow">📅 ${soonC} обучений истекают в течение 30 дней</div>`);
   const pendDocs=APP.docs.filter(d=>d.status==='Ожидает').length;
   if(pendDocs)alerts.push(`<div class="alert alert-blue">📄 ${pendDocs} документа ожидают подписи</div>`);
   alerts.push(`<div class="alert alert-yellow">⏱ Пятничный отчёт по моточасам</div>`);
-  document.getElementById('dash-alerts').innerHTML=alerts.join('');
-  document.getElementById('dash-emp').innerHTML=APP.employees.slice(0,8).map(e=>`<tr><td>${e.name}</td><td style="font-size:12px;color:var(--text2)">${e.pos}</td><td><span class="badge ${e.status==='Активен'?'badge-green':e.status==='Отпуск'?'badge-yellow':'badge-red'}">${e.status}</span></td></tr>`).join('');
-  document.getElementById('nb-train').textContent=expC+soonC>0?expC+soonC:'✓';
+  setHtml('dash-alerts', alerts.join(''));
+  setHtml('dash-emp', APP.employees.slice(0,8).map(e=>`<tr><td>${e.name}</td><td style="font-size:12px;color:var(--text2)">${e.pos}</td><td><span class="badge ${e.status==='Активен'?'badge-green':e.status==='Отпуск'?'badge-yellow':'badge-red'}">${e.status}</span></td></tr>`).join(''));
+  setTxt('nb-train', expC+soonC>0?expC+soonC:'✓');
   updateSickBadge();
-  document.getElementById('nb-docs').textContent=pendDocs||'✓';
+  setTxt('nb-docs', pendDocs||'✓');
 }
-
 // EMPLOYEES
 function renderEmployees(){
   document.getElementById('emp-table').innerHTML=APP.employees.map((e,i)=>{
@@ -2502,15 +2504,16 @@ function saveTrainingEdit(){
   const tidx=parseInt(document.getElementById('et-idx').value);
   APP.training[tidx].date=document.getElementById('et-date').value;
   closeModal('modal-edit-training');
-  renderTrainList();
-  if(typeof renderMatrix==='function') renderMatrix();
-  renderEmployees();
-  renderDashboard();
-  if(typeof renderMyTraining==='function' && document.getElementById('my-train-body')) renderMyTraining();
-  if(typeof renderWorkerHome==='function' && document.getElementById('page-worker-home') && document.getElementById('page-worker-home').classList.contains('active')) renderWorkerHome();
+  // СНАЧАЛА сохраняем, чтобы перерисовка не помешала записи
   if(db && auth && auth.currentUser){
     db.ref('training').set(APP.training).catch(e=>console.error(e));
   }
+  try{ renderTrainList(); }catch(e){}
+  try{ if(typeof renderMatrix==='function') renderMatrix(); }catch(e){}
+  try{ renderEmployees(); }catch(e){}
+  try{ renderDashboard(); }catch(e){}
+  try{ if(typeof renderMyTraining==='function' && document.getElementById('my-train-body')) renderMyTraining(); }catch(e){}
+  try{ if(typeof renderWorkerHome==='function' && document.getElementById('page-worker-home') && document.getElementById('page-worker-home').classList.contains('active')) renderWorkerHome(); }catch(e){}
 }
 function addTraining(){
   const p=document.getElementById('ta-person').value;
