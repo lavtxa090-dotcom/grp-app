@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
 :root{--bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8f0fe;--bg4:#dde8fb;--border:#c5d5ea;--border2:#a8bcd8;--text:#0d1b2a;--text2:#4a6080;--text3:#8aa0b8;--accent:#1b379e;--accent2:#2347c0;--red:#dc2626;--green:#16a34a;--blue:#1b379e;--purple:#7c3aed;--orange:#ea580c;--font-h:'Oswald',sans-serif;--font-b:'IBM Plex Sans',sans-serif;--font-m:'IBM Plex Mono',monospace}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -2562,88 +2563,105 @@ const MATRIX_COLS = [
   {head:'ВОЗ', match:'ВОЗ', period:'1 раз в год', years:1},
 ];
 
-function exportTrainingMatrix(){
-  if(!window.XLSX) return alert('XLSX не загружен');
+async function exportTrainingMatrix(){
+  if(typeof ExcelJS==='undefined') return alert('ExcelJS ещё не загрузился — обновите страницу и повторите');
   const norm = x => (x||'').toString().toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
   const DAYS = {0.5:153, 1:365, 2:730, 3:1095, 5:1825};
-  const toSerial = d => { const x=new Date(d); if(isNaN(x.getTime())) return null;
-    return Math.round((Date.UTC(x.getFullYear(),x.getMonth(),x.getDate()) - Date.UTC(1899,11,30))/86400000); };
-  const matchRec = (rec,col) => {
+  const matchRec = (rec,col)=>{
     const r=norm(rec.type), c=norm(col.match); let ok;
-    if(c.indexOf('охрана труда программа б')===0) ok = r.indexOf('охрана труда программа б')===0;
-    else if(c.indexOf('охрана труда программа в')===0) ok = r.indexOf('охрана труда программа в')===0;
-    else ok = (r===c);
+    if(c.indexOf('охрана труда программа б')===0) ok=r.indexOf('охрана труда программа б')===0;
+    else if(c.indexOf('охрана труда программа в')===0) ok=r.indexOf('охрана труда программа в')===0;
+    else ok=(r===c);
     if(!ok) return false;
     if(c==='сосуды под давлением') return col.indef ? (rec.years>=99) : (rec.years<99);
     return true;
   };
+  const PEACH='FFFCE4D6', GOLD='FFFFC000', GOLD_L='FFFFD966', GREEN_H='FFC6E0B4',
+        ORANGE_H='FFF4B183', GREEN_D='FFA9D08E', BLUE_D='FF9DC3E6';
+  const thin={style:'thin',color:{argb:'FFBFBFBF'}};
+  const border={top:thin,left:thin,bottom:thin,right:thin};
+  const headFill=j=> j<=1?GOLD : j<=13?GOLD_L : j<=26?GREEN_H : ORANGE_H;
+  const dataFill=j=> (j===28||j===29)?BLUE_D:GREEN_D;
 
-  const NC = MATRIX_COLS.length;
-  const W = 3 + NC;
-  const blank = () => new Array(W).fill('');
-  const rows = [];
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet('Матрица',{views:[{state:'frozen',xSplit:3,ySplit:3}]});
+  const NC=MATRIX_COLS.length;
 
-  const r1 = blank();
-  r1[0]='Дата'; r1[1]='Ф.И.О.'; r1[2]='Должность';
-  r1[3]='Медицинский центр';
-  r1[5]='ООО "Ньютех Велл Сервис" \nУдостоверение о проверке знаний';
-  r1[17]='Учебный центр АНО УМЦ ДПО "ПРОФИ"';
-  rows.push(r1);
-  const r2 = blank();
-  MATRIX_COLS.forEach((c,j)=> r2[3+j]=c.head);
-  rows.push(r2);
-  const r3 = blank();
-  r3[0]='ПОДРАЗДЕЛЕНИЕ';
-  MATRIX_COLS.forEach((c,j)=> r3[3+j]=c.period);
-  rows.push(r3);
+  ws.getCell('A1').value='Дата'; ws.getCell('B1').value='Ф.И.О.'; ws.getCell('C1').value='Должность';
+  ws.getCell('D1').value='Медицинский центр';
+  ws.getCell('F1').value='ООО "Ньютех Велл Сервис"\nУдостоверение о проверке знаний';
+  ws.getCell('R1').value='Учебный центр АНО УМЦ ДПО "ПРОФИ"';
+  ws.getCell('A2').value={formula:'TODAY()'}; ws.getCell('A2').numFmt='dd.mm.yyyy';
+  MATRIX_COLS.forEach((c,j)=>{ ws.getCell(2,4+j).value=c.head; });
+  ws.getCell('A3').value='ПОДРАЗДЕЛЕНИЕ';
+  MATRIX_COLS.forEach((c,j)=>{ ws.getCell(3,4+j).value=c.period; });
 
-  const merges = [
-    {s:{r:0,c:1},e:{r:1,c:1}}, {s:{r:0,c:2},e:{r:1,c:2}},
-    {s:{r:0,c:3},e:{r:0,c:4}}, {s:{r:0,c:5},e:{r:0,c:16}}, {s:{r:0,c:17},e:{r:0,c:29}},
-    {s:{r:2,c:0},e:{r:2,c:2}},
-  ];
-  const dateCells=[], formulaCells=[];
+  ws.mergeCells('B1:B2'); ws.mergeCells('C1:C2');
+  ws.mergeCells('D1:E1'); ws.mergeCells('F1:Q1'); ws.mergeCells('R1:AD1'); ws.mergeCells('A3:C3');
 
-  const emps = APP.employees.filter(e=>e.status!=='Уволен')
-    .slice().sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  for(let r=1;r<=3;r++) for(let c=1;c<=3+NC;c++) ws.getCell(r,c).border=border;
+  ['A1','B1','C1','D1','F1','R1'].forEach(a=>{ const cell=ws.getCell(a);
+    cell.font={bold:true,size:12,name:'Calibri'};
+    cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:PEACH}}; });
+  MATRIX_COLS.forEach((c,j)=>{ const cell=ws.getCell(2,4+j);
+    cell.font={bold:true,size:9,name:'Calibri'};
+    cell.alignment={textRotation:90,horizontal:'center',vertical:'middle',wrapText:true};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:headFill(j)}}; });
+  MATRIX_COLS.forEach((c,j)=>{ const cell=ws.getCell(3,4+j);
+    cell.font={bold:true,size:8,name:'Calibri'};
+    cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:headFill(j)}}; });
+  ws.getCell('A2').alignment={horizontal:'center',vertical:'middle'}; ws.getCell('A2').font={bold:true,size:10};
+  ws.getCell('A3').font={bold:true,size:10}; ws.getCell('A3').alignment={horizontal:'center',vertical:'middle'};
+
+  const emps=APP.employees.filter(e=>e.status!=='Уволен').slice().sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  let row=4;
   emps.forEach(emp=>{
-    const recs = APP.training.filter(t=>t.person===emp.name);
-    const fact = blank(), pln = blank();
-    fact[0]='Фактическая'; pln[0]='Планируемая';
-    fact[1]=emp.name; fact[2]=emp.pos;
-    const baseR = rows.length;
+    const recs=APP.training.filter(t=>t.person===emp.name);
+    const fr=row, pr=row+1;
+    ws.getCell(fr,1).value='Фактическая'; ws.getCell(pr,1).value='Планируемая';
+    ws.getCell(fr,2).value=emp.name; ws.getCell(fr,3).value=emp.pos;
+    ws.mergeCells(fr,2,pr,2); ws.mergeCells(fr,3,pr,3);
     MATRIX_COLS.forEach((col,j)=>{
-      const c = 3+j;
-      const rec = recs.find(r=>matchRec(r,col));
+      const c=4+j;
+      const rec=recs.find(r=>matchRec(r,col));
+      const fcell=ws.getCell(fr,c), pcell=ws.getCell(pr,c);
       if(rec && rec.date){
-        const ser = toSerial(rec.date);
-        if(ser!=null) dateCells.push({r:baseR,c,serial:ser});
-        if(col.period==='бессрочно' || col.years>=99) pln[c]='бессрочно';
-        else if(col.period==='') { /* пропуск без срока действия */ }
-        else formulaCells.push({r:baseR+1, c, factR:baseR, days:(DAYS[col.years]||Math.round(col.years*365))});
+        const d=new Date(rec.date);
+        fcell.value=d; fcell.numFmt='dd.mm.yyyy';
+        if(col.period==='бессрочно'||col.years>=99){ pcell.value='бессрочно'; }
+        else if(col.period===''){ /* без срока */ }
+        else { const days=DAYS[col.years]||Math.round(col.years*365);
+          const fa=fcell.address; pcell.value={formula:'IF('+fa+'>0,'+fa+'+'+days+'," ")'}; pcell.numFmt='dd.mm.yyyy'; }
       }
     });
-    merges.push({s:{r:baseR,c:1},e:{r:baseR+1,c:1}});
-    merges.push({s:{r:baseR,c:2},e:{r:baseR+1,c:2}});
-    rows.push(fact); rows.push(pln);
+    [fr,pr].forEach(r=>{ for(let c=1;c<=3+NC;c++){ const cell=ws.getCell(r,c);
+      cell.border=border; cell.alignment={horizontal:'center',vertical:'middle'};
+      if(c>=4){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:dataFill(c-4)}}; cell.font={size:9,name:'Calibri'}; }
+    }});
+    ws.getCell(fr,1).font={size:8,italic:true,name:'Calibri'};
+    ws.getCell(pr,1).font={size:8,italic:true,name:'Calibri'};
+    ws.getCell(fr,2).font={bold:true,size:10,name:'Calibri'};
+    ws.getCell(fr,2).alignment={horizontal:'left',vertical:'middle',wrapText:true};
+    ws.getCell(fr,3).alignment={horizontal:'left',vertical:'middle',wrapText:true};
+    ws.getRow(fr).height=22; ws.getRow(pr).height=22;
+    row+=2;
   });
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['A2'] = {t:'n', f:'TODAY()', z:'dd.mm.yyyy'};
-  dateCells.forEach(dc=>{
-    ws[XLSX.utils.encode_cell({r:dc.r,c:dc.c})] = {t:'n', v:dc.serial, z:'dd.mm.yyyy'};
-  });
-  formulaCells.forEach(fc=>{
-    const a = XLSX.utils.encode_cell({r:fc.r,c:fc.c});
-    const fa = XLSX.utils.encode_cell({r:fc.factR,c:fc.c});
-    ws[a] = {t:'n', f:'IF('+fa+'>0,'+fa+'+'+fc.days+'," ")', z:'dd.mm.yyyy'};
-  });
-  ws['!merges'] = merges;
-  ws['!cols'] = [{wch:11},{wch:24},{wch:24}].concat(MATRIX_COLS.map(()=>({wch:14})));
-  ws['!freeze'] = {xSplit:3, ySplit:3};
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Матрица');
-  XLSX.writeFile(wb, 'Матрица_обучений_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  ws.getColumn(1).width=12; ws.getColumn(2).width=26; ws.getColumn(3).width=22;
+  for(let j=0;j<NC;j++) ws.getColumn(4+j).width=12;
+  ws.getRow(1).height=46; ws.getRow(2).height=150; ws.getRow(3).height=40;
+
+  try{
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='Матрица_обучений_'+new Date().toISOString().split('T')[0]+'.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },200);
+  }catch(e){ alert('Ошибка формирования файла: '+e.message); }
 }
 
 
