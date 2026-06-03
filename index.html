@@ -2506,6 +2506,8 @@ function saveTrainingEdit(){
   if(typeof renderMatrix==='function') renderMatrix();
   renderEmployees();
   renderDashboard();
+  if(typeof renderMyTraining==='function' && document.getElementById('my-train-body')) renderMyTraining();
+  if(typeof renderWorkerHome==='function' && document.getElementById('page-worker-home') && document.getElementById('page-worker-home').classList.contains('active')) renderWorkerHome();
   if(db && auth && auth.currentUser){
     db.ref('training').set(APP.training).catch(e=>console.error(e));
   }
@@ -3314,7 +3316,8 @@ function refreshCurrentPage(changedCol){
     const fn={dashboard:renderDashboard,employees:renderEmployees,docs:renderDocs,
       fuel:renderFuel,training:renderTraining,equipment:renderEquipment,
       moto:renderMoto,calc:renderCalcHistory,'sick-leaves':renderSickLeaves,
-      vacations:renderVacations,'worker-home':renderWorkerHome};
+      vacations:renderVacations,'worker-home':renderWorkerHome,
+      'my-training':renderMyTraining,'my-vacation':renderMyVacation,'worker-fuel':renderWorkerFuel};
     if(fn[activeId]) setTimeout(()=>fn[activeId](),100);
   }
 }
