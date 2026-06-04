@@ -497,17 +497,11 @@ body{color-scheme:light}
       <div style="font-family:var(--font-h);font-size:20px;font-weight:500;letter-spacing:1px">Мои обучения</div>
       <div style="font-size:13px;color:var(--text2);margin-top:4px" id="my-train-name"></div>
     </div>
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">📋 Сертификаты и допуски</div>
-      </div>
-      <div class="section-body" style="padding:0">
-        <table class="data-table">
-          <thead><tr><th>Обучение</th><th>Дата</th><th>Статус</th><th>Дней</th><th></th></tr></thead>
-          <tbody id="my-train-body"></tbody>
-        </table>
-      </div>
+    <div id="my-train-summary"></div>
+    <div class="section-header" style="margin-bottom:12px">
+      <div class="section-title">📋 Сертификаты и допуски</div>
     </div>
+    <div id="my-train-body"></div>
   </div>
 
   <!-- MOTO -->
@@ -3607,20 +3601,55 @@ function gotoMotoEquip(equipIdx){
 function renderMyTraining(){
   const name = APP.currentUser;
   const myTrain = APP.training.filter(t=>t.person===name);
-  document.getElementById('my-train-name').textContent = name;
-  document.getElementById('my-train-body').innerHTML = myTrain.map((t,i)=>{
-    const st=trainStatus(t);
-    const ri=APP.training.indexOf(t);
-    return `<tr>
-      <td>${t.type}</td>
-      <td class="mono" style="font-size:12px">${fmt(t.date)}</td>
-      <td><span class="badge ${st.status==='exp'?'badge-red':st.status==='soon'?'badge-yellow':'badge-green'}">${st.label}</span></td>
-      <td class="mono" style="color:${st.status==='exp'?'var(--red)':st.status==='soon'?'var(--accent)':'var(--text3)'}">${st.days<0?Math.abs(st.days)+'д назад':'+'+st.days+'д'}</td>
-      <td><button class="btn-icon btn-sm" onclick="openTrainEdit(${ri})" title="Обновить дату">✎</button></td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="5" style="color:var(--text3);text-align:center">Нет данных</td></tr>';
-}
+  const nameEl=document.getElementById('my-train-name'); if(nameEl) nameEl.textContent=name;
+  const body=document.getElementById('my-train-body'); if(!body) return;
 
+  if(myTrain.length===0){
+    body.innerHTML = `<div class="section"><div class="section-body" style="text-align:center;padding:40px;color:var(--text3)">
+      Обучения не найдены<br><span style="font-size:12px">Обратитесь к мастеру</span></div></div>`;
+    const sum0=document.getElementById('my-train-summary'); if(sum0) sum0.innerHTML='';
+    return;
+  }
+
+  const order={exp:0,soon:1,unknown:2,ok:3};
+  const items=myTrain.map(t=>({t, st:trainStatus(t), ri:APP.training.indexOf(t)}))
+    .sort((a,b)=> (order[a.st.status]-order[b.st.status]) || ((a.st.days==null?99999:a.st.days)-(b.st.days==null?99999:b.st.days)));
+
+  let html=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px">`;
+  items.forEach(({t,st,ri})=>{
+    const isPerm = st.label==='Бессрочно' || (st.days!=null && st.days>=9000);
+    const border = st.status==='exp'?'var(--red)':st.status==='soon'?'var(--accent)':st.status==='ok'?'var(--green)':'var(--border2)';
+    const stColor = st.status==='exp'?'var(--red)':st.status==='soon'?'var(--accent)':st.status==='ok'?'var(--green)':'var(--text3)';
+    const badgeCls = st.status==='exp'?'badge-red':st.status==='soon'?'badge-yellow':st.status==='ok'?'badge-green':'badge-gray';
+    let daysText='';
+    if(!isPerm && st.days!=null){ daysText = st.days<0 ? (Math.abs(st.days)+' дн назад') : ('осталось '+st.days+' дн'); }
+    html+=`<div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid ${border};border-radius:8px;padding:16px;position:relative">
+      <button class="btn-icon btn-sm" onclick="openTrainEdit(${ri})" title="Обновить дату" style="position:absolute;top:10px;right:10px">✎</button>
+      <div style="font-size:14px;font-weight:600;color:var(--text);padding-right:34px;line-height:1.35;margin-bottom:12px">${t.type}</div>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px">
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-family:var(--font-m);letter-spacing:.5px">ДАТА ПРОХОЖДЕНИЯ</div>
+          <div style="font-family:var(--font-m);font-size:16px;color:var(--text);margin-top:2px">${t.date?fmt(t.date):'— не указана'}</div>
+        </div>
+        <span class="badge ${badgeCls}" style="white-space:nowrap">${st.label}</span>
+      </div>
+      ${daysText?`<div style="margin-top:8px;font-size:12px;font-family:var(--font-m);color:${stColor}">${daysText}</div>`:''}
+    </div>`;
+  });
+  html+='</div>';
+  body.innerHTML=html;
+
+  const sum=document.getElementById('my-train-summary');
+  if(sum){
+    const expC=myTrain.filter(t=>trainStatus(t).status==='exp').length;
+    const soonC=myTrain.filter(t=>trainStatus(t).status==='soon').length;
+    let banner='';
+    if(expC>0) banner=`<div class="alert alert-red" style="margin-bottom:16px;font-size:14px;padding:14px">⚠ Просрочено: <b>${expC}</b> — обратитесь к мастеру для продления</div>`;
+    else if(soonC>0) banner=`<div class="alert alert-yellow" style="margin-bottom:16px;font-size:14px;padding:14px">📅 Скоро истекает: <b>${soonC}</b> — обновите даты после прохождения</div>`;
+    else banner=`<div class="alert alert-green" style="margin-bottom:16px;font-size:14px;padding:14px">✅ Все допуски действуют</div>`;
+    sum.innerHTML=banner;
+  }
+}
 // ============ INIT ============
 function openMyTrainingModal(){
   document.getElementById('mat-type').value='';
