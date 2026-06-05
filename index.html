@@ -1132,7 +1132,7 @@ const APP={
     {name:'Иванов Павел Вадимович',tab:'01253',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Кондратенко Виктор Александрович',tab:'00521',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Краснояров Евгений Геннадьевич',tab:'00576',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Липатников Денис Александрович',tab:'00799',pos:'Пультовик',role:'operator',status:'Активен'},
+    {name:'Липатников Денис Александрович',tab:'00799',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
@@ -2766,6 +2766,11 @@ function fixEmployeeNames(silent){
   (APP.training||[]).forEach(t=>{ const f=fix(t.person); if(f!==t.person){ t.person=f; changed.training=true; } });
   (APP.vacations||[]).forEach(v=>{ const f=fix(v.person); if(f!==v.person){ v.person=f; changed.vacations=true; } });
   (APP.sickLeaves||[]).forEach(s=>{ const f=fix(s.name); if(f!==s.name){ s.name=f; changed.sickLeaves=true; } });
+  // Липатников — обычный оператор (убрать роль пультовика)
+  (APP.employees||[]).forEach(e=>{ if(e.name && e.name.indexOf('Липатников')===0){
+    if(e.role!=='worker'){ e.role='worker'; changed.employees=true; }
+    if(e.pos==='Пультовик'){ e.pos='Оператор по ГРП'; changed.employees=true; }
+  }});
   let any=false;
   Object.keys(changed).forEach(c=>{ if(changed[c]){ any=true; if(typeof saveToFirebase==='function') saveToFirebase(c, APP[c]); } });
   if(any){
@@ -2983,7 +2988,7 @@ function applySession(session){
   const nameEl = document.getElementById('sidebar-user-name');
   const roleEl = document.getElementById('sidebar-user-role');
   if(nameEl) nameEl.textContent = session.name;
-  if(roleEl) roleEl.textContent = (session.role==='master'?'⭐ Мастер':session.role==='operator'?'🎛 Пультовик':'👷 Работник') + (emp?' · '+emp.pos:'');
+  if(roleEl) roleEl.textContent = (session.role==='master'?'⭐ Мастер':'👷 Работник') + (emp?' · '+emp.pos:'');
   // Build nav based on role
   buildNav(session.role);
   // Hide auth screen
@@ -2992,8 +2997,6 @@ function applySession(session){
   // Navigate to start page immediately (data will load via Firebase listeners)
   if(session.role==='master'){
     goto('dashboard');
-  } else if(session.role==='operator'){
-    goto('operator-shift');
   } else {
     goto('worker-home');
   }
@@ -3023,18 +3026,6 @@ function buildNav(role){
     // Show seed button for master
     const seedBtn = document.getElementById('seed-btn');
     if(seedBtn) seedBtn.style.display = 'flex';
-  } else if(role==='operator'){
-    nav.innerHTML=`
-      <div class="nav-section">Пультовик</div>
-      <div class="nav-item" onclick="goto('worker-home')"><span class="icon">🏠</span> Главная</div>
-      <div class="nav-item" onclick="goto('worker-fuel')"><span class="icon">⛽</span> Заправки</div>
-      <div class="nav-item" onclick="goto('operator-shift')"><span class="icon">🔄</span> Вахта (пультовик)</div>
-      <div class="nav-item" onclick="goto('moto')"><span class="icon">⏱</span> Моточасы</div>
-      <div class="nav-item" onclick="goto('calc')"><span class="icon">🧮</span> Расчёт топлива</div>
-      <div class="nav-section">Мой профиль</div>
-      <div class="nav-item" onclick="goto('my-training')"><span class="icon">🎓</span> Моё обучение</div>
-      <div class="nav-item" onclick="goto('my-vacation')"><span class="icon">🏖</span> Мой отпуск</div>
-    `;
   } else {
     nav.innerHTML=`
       <div class="nav-section">Моя работа</div>
@@ -3064,7 +3055,7 @@ const AUTH_EMPLOYEES = [
   {name:'Иванов Павел Вадимович',tab:'01253',pos:'Оператор по ГРП',role:'worker'},
   {name:'Кондратенко Виктор Александрович',tab:'00521',pos:'Оператор по ГРП',role:'worker'},
   {name:'Краснояров Евгений Геннадьевич',tab:'00576',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Липатников Денис Александрович',tab:'00799',pos:'Пультовик',role:'operator'},
+  {name:'Липатников Денис Александрович',tab:'00799',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker'},
   {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker'},
