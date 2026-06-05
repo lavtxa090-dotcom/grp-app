@@ -2494,13 +2494,24 @@ async function exportMoto(){
   for(let r=5;r<=7;r++) for(let c=2;c<=23;c++) C(r,c).border=B;
   ws.getRow(5).height=26; ws.getRow(6).height=24; ws.getRow(7).height=40;
 
-  // Поиск показаний по гаражному номеру
+  // Поиск показаний по гаражному номеру — индексируем motoData НАПРЯМУЮ
+  // (по имени и по всем гаражным номерам в полях), не завися от реестра техники
   const norm=v=>String(v==null?'':v).trim();
+  // извлекаем гаражные токены из строки: "ВА 0628/86" -> ["0628","86"], "624" -> ["624"]
+  const garTokens=v=>String(v==null?'':v)
+    .split(/[\/,\s]+/).map(x=>x.trim())
+    .filter(x=>x && /\d/.test(x) && x.toLowerCase()!=='б/н' && x!=='б' && x!=='н');
   const byGar={};
+  const reg=(key,m)=>{ const k=norm(key); if(k && !byGar[k]) byGar[k]={m}; };
+  // 1) сами записи моточасов — по имени и по номерам в их полях
+  (APP.motoData||[]).forEach(m=>{
+    reg(m.name,m);
+    [m.name,m.gov_tractor,m.gov_unit,m.gar_tractor,m.gar_unit,m.gar].forEach(f=>garTokens(f).forEach(t=>reg(t,m)));
+  });
+  // 2) реестр техники как мост (если имя совпадает с записью моточасов)
   (APP.equipment||[]).forEach(eq=>{
-    const m=(APP.motoData||[]).find(x=>x.name===eq.name)||{};
-    const k=norm(eq.gar);
-    if(k) byGar[k]={eq,m};
+    const m=(APP.motoData||[]).find(x=>x.name===eq.name);
+    if(m){ reg(eq.gar,m); garTokens(eq.gov).forEach(t=>reg(t,m)); }
   });
   const usedGar=new Set();
   const capF=v=>{ v=String(v||''); return v? v.charAt(0).toUpperCase()+v.slice(1):''; };
@@ -2527,8 +2538,10 @@ async function exportMoto(){
   let r=8;
   FLEET_ROSTER.forEach((R,idx)=>{
     const findByGar=(garField)=>{ if(!garField) return null;
-      const parts=String(garField).split(/[\/,]/).map(x=>x.trim()).filter(x=>x && x.toLowerCase()!=='б/н' && x!=='б' && x!=='н');
+      const parts=garTokens(garField);
       for(let k=0;k<parts.length;k++){ if(byGar[parts[k]]) return {key:parts[k], m:byGar[parts[k]].m}; }
+      const whole=norm(garField);
+      if(byGar[whole]) return {key:whole, m:byGar[whole].m};
       return null; };
     const tf=findByGar(R.tgar), uf=findByGar(R.ugar);
     const t = tf? tf.m : {};
