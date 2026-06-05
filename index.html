@@ -2373,7 +2373,7 @@ function renderMotoCard(){
       <div class="form-row cols-2">
         <div class="form-group"><label class="form-label">Запасное колесо</label>
           <select class="form-select" onchange="APP.motoData[${mi}].spareWheel=this.value">
-            ${opt('есть',m.spareWheel)}${opt('нет',m.spareWheel)}
+            ${opt('есть',m.spareWheel)}${opt('нет',m.spareWheel)}${opt('не применимо',m.spareWheel)}
           </select></div>
         <div class="form-group"><label class="form-label">Кондиционер</label>
           <select class="form-select" onchange="APP.motoData[${mi}].ac=this.value">
@@ -2393,7 +2393,7 @@ function renderMotoCard(){
       <div class="form-row cols-2">
         <div class="form-group"><label class="form-label">ПЖД №2 <span style="color:var(--text3);font-weight:400">(если есть)</span></label>
           <select class="form-select" onchange="APP.motoData[${mi}].pzhd2=this.value">
-            ${opt('нет',m.pzhd2)}${opt('работает',m.pzhd2)}${opt('не работает',m.pzhd2)}
+            ${opt('нет',m.pzhd2)}${opt('работает',m.pzhd2)}${opt('не работает',m.pzhd2)}${opt('не применимо',m.pzhd2)}
           </select></div>
         <div class="form-group"><label class="form-label">Сухой фен</label>
           <select class="form-select" onchange="APP.motoData[${mi}].dryFan=this.value">
@@ -2518,14 +2518,16 @@ async function exportMoto(){
   const heaterTxt=m=>{
     const parts=[];
     const p1=m.pzhd||'', p2=m.pzhd2||'нет';
+    const p2off = !p2 || p2==='нет' || p2==='не применимо';
     if(p1 && p1!=='не применимо'){
-      if(p2 && p2!=='нет'){ parts.push('ПЖД 1 - '+capF(p1)); parts.push('ПЖД 2 - '+capF(p2)); }
+      if(!p2off){ parts.push('ПЖД 1 - '+capF(p1)); parts.push('ПЖД 2 - '+capF(p2)); }
       else parts.push('ПЖД - '+capF(p1));
-    } else if(p2 && p2!=='нет'){ parts.push('ПЖД 2 - '+capF(p2)); }
+    } else if(!p2off){ parts.push('ПЖД 2 - '+capF(p2)); }
     const fan=m.dryFan||'нет';
     if(fan && fan!=='нет') parts.push('Сухой фен - '+capF(fan));
     return parts.join('   ');
   };
+  const sw=v=>v==='не применимо'?'—':(v||'');
   const putRow=(r,row,grayUnit)=>{
     const gray = grayUnit && grayUnit.unused;
     for(let c=2;c<=23;c++){ const cell=ws.getCell(r,c); cell.value=(row[c]!==undefined?row[c]:'');
@@ -2558,10 +2560,10 @@ async function exportMoto(){
       2:idx+1, 3:R.c||'', 4:R.d||'', 5:R.e||'', 6:R.f||'', 7:R.role||'', 8:R.marka||'',
       // ТЯГАЧ
       9:R.tgov||'', 10:R.tgar||'', 11:t.km||'', 12:(t.mh_unit||t.mh_tractor||''),
-      13:t.spareWheel||'', 14:t.ac||'', 15:heaterTxt(t), 16:t.emergencyStop||'',
+      13:sw(t.spareWheel), 14:t.ac||'', 15:heaterTxt(t), 16:t.emergencyStop||'',
       // УСТАНОВКА
       17:R.ugov||'', 18:R.ugar||'', 19:(u.mh_unit||u.mh_tractor||''),
-      20:heaterTxt(u), 21:u.spareWheel||'', 22:u.ac||'', 23:u.emergencyStop||''
+      20:heaterTxt(u), 21:sw(u.spareWheel), 22:u.ac||'', 23:u.emergencyStop||''
     };
     putRow(r, row, t.unused?t:(u.unused?u:null));
     blueGar(r,[10,18]);
@@ -2576,7 +2578,7 @@ async function exportMoto(){
     extras.forEach((eq,j)=>{
       const m=(APP.motoData||[]).find(x=>x.name===eq.name)||{};
       const row={2:FLEET_ROSTER.length+j+1, 8:eq.name||'', 9:eq.gov||'', 10:eq.gar||'',
-        11:m.km||'', 12:(m.mh_unit||m.mh_tractor||''), 13:m.spareWheel||'', 14:m.ac||'', 15:heaterTxt(m), 16:m.emergencyStop||''};
+        11:m.km||'', 12:(m.mh_unit||m.mh_tractor||''), 13:sw(m.spareWheel), 14:m.ac||'', 15:heaterTxt(m), 16:m.emergencyStop||''};
       putRow(r, row, m.unused?m:null);
       blueGar(r,[10,18]);
       r++;
