@@ -2289,7 +2289,7 @@ function getMotoRecord(equipName){
   if(!rec){
     rec = {name:equipName, km:'', mh_tractor:'', mh_unit:'', status:'В наличии',
            gov_tractor:'', gar_tractor:'', gov_unit:'', gar_unit:'',
-           spareWheel:'есть', ac:'исправен', heater:'исправен', emergencyStop:'исправен', pzhd:'работает'};
+           spareWheel:'есть', ac:'исправен', heater:'исправен', emergencyStop:'исправен', pzhd:'работает', unused:false};
     APP.motoData.push(rec);
   }
   return rec;
@@ -2397,6 +2397,10 @@ function renderMotoCard(){
       </div>
     </div>
 
+    <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;font-size:13px;color:var(--text2);cursor:pointer">
+      <input type="checkbox" ${m.unused?'checked':''} onchange="APP.motoData[${mi}].unused=this.checked" style="width:18px;height:18px">
+      🚫 Техника не используется (в отчёте — серым)
+    </label>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveMotoCard(${mi})">✅ Сохранить</button>`;
 }function saveMotoCard(mi){
   const m=APP.motoData[mi];
@@ -2413,22 +2417,80 @@ function renderMotoMaster(){
   const pct=APP.motoData.length?Math.round(filled/APP.motoData.length*100):0;
   document.getElementById('moto-fill-pct').textContent=pct+'%';
   document.getElementById('moto-fill-bar').style.width=pct+'%';
-  document.getElementById('moto-master-body').innerHTML=APP.motoData.map((m,i)=>`<tr><td class="mono" style="color:var(--text3)">${i+1}</td><td>${m.name}<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-m)">${m.gov_tractor}</span>${(function(){const p=[];if(m.spareWheel==='нет')p.push('нет запаски');if(m.ac==='не исправен')p.push('кондиционер');if(m.heater==='не исправен')p.push('отопитель');if(m.emergencyStop==='не исправен')p.push('авар.глушение');if(m.pzhd==='не работает')p.push('ПЖД');return p.length?'<br><span style=\'font-size:10px;color:var(--red);font-family:var(--font-m)\'>⚠ '+p.join(', ')+'</span>':'';})()}</td><td class="mono">${m.km||'—'}</td><td class="mono">${m.mh_tractor||'—'}</td><td style="font-size:12px;color:var(--text2);font-family:var(--font-m)">${m.gov_unit}</td><td class="mono">${m.mh_unit||'—'}</td><td><span class="badge ${m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray'}">${m.status}</span></td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openMotoEdit(${i})">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delMotoUnit(${i})">✕</button></td></tr>`).join('');
+  document.getElementById('moto-master-body').innerHTML=APP.motoData.map((m,i)=>`<tr style="${m.unused?'background:#e5e5e5;color:#777':''}"><td class="mono" style="color:var(--text3)">${i+1}</td><td>${m.name}<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-m)">${m.gov_tractor}</span>${(function(){const p=[];if(m.spareWheel==='нет')p.push('нет запаски');if(m.ac==='не исправен')p.push('кондиционер');if(m.heater==='не исправен')p.push('отопитель');if(m.emergencyStop==='не исправен')p.push('авар.глушение');if(m.pzhd==='не работает')p.push('ПЖД');return p.length?'<br><span style=\'font-size:10px;color:var(--red);font-family:var(--font-m)\'>⚠ '+p.join(', ')+'</span>':'';})()}</td><td class="mono">${m.km||'—'}</td><td class="mono">${m.mh_tractor||'—'}</td><td style="font-size:12px;color:var(--text2);font-family:var(--font-m)">${m.gov_unit}</td><td class="mono">${m.mh_unit||'—'}</td><td><span class="badge ${m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray'}">${m.status}</span></td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openMotoEdit(${i})">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delMotoUnit(${i})">✕</button></td></tr>`).join('');
 }
 function openMotoEdit(i){const m=APP.motoData[i];document.getElementById('em-idx').value=i;document.getElementById('em-title').textContent=m.name+' ('+m.gov_tractor+')';document.getElementById('em-km').value=m.km||'';document.getElementById('em-mh-t').value=m.mh_tractor||'';document.getElementById('em-mh-u').value=m.mh_unit||'';document.getElementById('em-status').value=m.status;openModal('modal-edit-moto')}
 function saveMotoEdit(){const i=parseInt(document.getElementById('em-idx').value);APP.motoData[i].km=document.getElementById('em-km').value;APP.motoData[i].mh_tractor=document.getElementById('em-mh-t').value;APP.motoData[i].mh_unit=document.getElementById('em-mh-u').value;APP.motoData[i].status=document.getElementById('em-status').value;closeModal('modal-edit-moto');renderMotoMaster()
   saveToFirebase('motoData', APP.motoData);
 }
-function exportMoto(){
-  if(!window.XLSX)return alert('XLSX не загружен');
-  const wb=XLSX.utils.book_new();
-  const rows=[['#','Тягач гос.№','Гар.№','Пробег','М/Ч тягача','Установка гос.№','Гар.№ уст.','М/Ч уст.','Статус','Запасное колесо','Кондиционер','Отопитель','Аварийное глушение','ПЖД']];
-  APP.motoData.forEach((m,i)=>rows.push([i+1,m.gov_tractor,m.gar_tractor,m.km||'',m.mh_tractor||'',m.gov_unit,m.gar_unit,m.mh_unit||'',m.status,m.spareWheel||'',m.ac||'',m.heater||'',m.emergencyStop||'',m.pzhd||'']));
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb,'Моточасы',ws);
-  XLSX.writeFile(wb,`Моточасы_${document.getElementById('moto-date').value}.xlsx`);
-}
+async function exportMoto(){
+  if(typeof ExcelJS==='undefined') return alert('ExcelJS ещё не загрузился — обновите страницу');
+  const reportDate=(document.getElementById('moto-date')&&document.getElementById('moto-date').value)||new Date().toISOString().split('T')[0];
+  const thin={style:'thin',color:{argb:'FF000000'}};
+  const B={top:thin,left:thin,bottom:thin,right:thin};
+  const GRAY='FF7B7B7B', RED='FFFF0000';
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet('Моточасы');
+  const C=(r,c)=>ws.getCell(r,c);
+  const widths=[4,6,28,14,28,14,22,22,14,8,10,8,13,13,22,14,14,8,8,18,13,13,14];
+  widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
 
+  ws.mergeCells('A1:A2'); ws.mergeCells('B1:H2'); ws.mergeCells('I1:W2');
+  C(1,2).value='NEWTECK WELL SERVICE';
+  C(1,9).value='Список работников бригады ГРП, Флот № 2';
+  [C(1,1),C(1,2),C(1,9)].forEach(c=>{c.border=B;c.alignment={horizontal:'center',vertical:'middle',wrapText:true};});
+  C(1,2).font={bold:true,size:13,name:'Calibri'};
+  C(1,9).font={bold:true,size:18,name:'Calibri'};
+  ws.getRow(1).height=28; ws.getRow(2).height=28;
+
+  ws.mergeCells('B3:T3'); ws.mergeCells('U3:W3');
+  C(3,2).value='Закрепление за техникой';
+  C(3,2).font={bold:true,size:16,name:'Calibri'}; C(3,2).alignment={horizontal:'center',vertical:'middle'}; C(3,2).border=B;
+  C(3,21).value=new Date(reportDate); C(3,21).numFmt='dd.mm.yyyy';
+  C(3,21).font={bold:true,size:14,name:'Calibri'}; C(3,21).alignment={horizontal:'center',vertical:'middle'}; C(3,21).border=B;
+  ws.getRow(3).height=34;
+
+  const left=[[2,'№ п/п'],[3,'Ф.И.О.'],[4,'№ телефона'],[5,'Ф.И.О.'],[6,'№ телефона'],[7,'Должность'],[8,'Марка / Модель']];
+  left.forEach(([col,txt])=>{ ws.mergeCells(5,col,7,col); const c=C(5,col); c.value=txt;
+    c.font={bold:true,size:12,name:'Calibri'}; c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; });
+  ws.mergeCells('I5:W5'); C(5,9).value='Техника флота ГРП';
+  C(5,9).font={bold:true,size:16,name:'Calibri'}; C(5,9).alignment={horizontal:'center',vertical:'middle'};
+  ws.mergeCells('I6:P6'); C(6,9).value='Тягач';
+  ws.mergeCells('Q6:W6'); C(6,17).value='Установка';
+  [C(6,9),C(6,17)].forEach(c=>{c.font={bold:true,size:13,name:'Calibri'};c.alignment={horizontal:'center',vertical:'middle'};});
+  const subs={9:'гос. №',10:'гар.#',11:'Пробег',12:'м/ч',13:'Запасное колесо',14:'Кондиционер',15:'Отопитель',16:'Аварийное глушение',
+              17:'гос. №',18:'гар.#',19:'м/ч',20:'Отопитель',21:'Запасное колесо',22:'Кондиционер',23:'Аварийное глушение'};
+  Object.keys(subs).forEach(col=>{ col=+col; const c=C(7,col); c.value=subs[col];
+    c.font={bold:true,size:10,name:'Calibri'}; c.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    if(col===16||col===23){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:RED}}; c.font={bold:true,size:10,name:'Calibri',color:{argb:'FFFFFFFF'}}; } });
+  for(let r=5;r<=7;r++) for(let c=2;c<=23;c++) C(r,c).border=B;
+  ws.getRow(5).height=26; ws.getRow(6).height=24; ws.getRow(7).height=40;
+
+  const eqs=(APP.equipment||[]);
+  let r=8;
+  eqs.forEach((eq,idx)=>{
+    const m=(APP.motoData||[]).find(x=>x.name===eq.name) || {};
+    const heater = m.heater ? ('Отопитель: '+m.heater + (m.pzhd?'  ·  ПЖД: '+m.pzhd:'')) : (m.pzhd?'ПЖД: '+m.pzhd:'');
+    const vals={2:idx+1,8:eq.name||'',9:eq.gov||'',10:eq.gar||'',11:m.km||'',12:(m.mh_unit||m.mh_tractor||''),
+      13:m.spareWheel||'',14:m.ac||'',15:heater,16:m.emergencyStop||''};
+    for(let c=2;c<=23;c++){ const cell=C(r,c); cell.value=(vals[c]!==undefined?vals[c]:'');
+      cell.border=B; cell.font={bold:true,size:11,name:'Calibri'}; cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+      if(m.unused){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAY}}; cell.font={bold:true,size:11,name:'Calibri',color:{argb:'FFFFFFFF'}}; }
+    }
+    ws.getRow(r).height=46; r++;
+  });
+  ws.views=[{state:'frozen',ySplit:7}];
+
+  try{
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='Моточасы_'+reportDate+'_Флот_2.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },200);
+  }catch(e){ alert('Ошибка формирования файла: '+e.message); }
+}
 // TRAINING
 let trainTabCur='list';
 function trainTab(t){
