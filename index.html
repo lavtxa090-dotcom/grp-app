@@ -2923,6 +2923,9 @@ async function exportTrainingMatrix(){
   ws.getCell('A3').font={bold:true,size:10}; ws.getCell('A3').alignment={horizontal:'center',vertical:'middle'};
 
   const emps=APP.employees.filter(e=>e.status!=='Уволен').slice().sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  const TODAY0=new Date(); TODAY0.setHours(0,0,0,0);
+  // цвета подсветки (как стандартные стили Excel «Плохо»/«Нейтрально»)
+  const RED_HI='FFFFC7CE', RED_FONT='FF9C0006', YEL_HI='FFFFEB9C', YEL_FONT='FF9C6500';
   let row=4;
   emps.forEach(emp=>{
     const recs=APP.training.filter(t=>t.person===emp.name);
@@ -2930,6 +2933,7 @@ async function exportTrainingMatrix(){
     ws.getCell(fr,1).value='Фактическая'; ws.getCell(pr,1).value='Планируемая';
     ws.getCell(fr,2).value=emp.name; ws.getCell(fr,3).value=emp.pos;
     ws.mergeCells(fr,2,pr,2); ws.mergeCells(fr,3,pr,3);
+    const hiCells=[]; // ячейки даты окончания, которые надо подсветить
     MATRIX_COLS.forEach((col,j)=>{
       const c=4+j;
       const rec=recs.find(r=>matchRec(r,col));
@@ -2940,13 +2944,24 @@ async function exportTrainingMatrix(){
         if(col.period==='бессрочно'||col.years>=99){ pcell.value='бессрочно'; }
         else if(col.period===''){ /* без срока */ }
         else { const days=DAYS[col.years]||Math.round(col.years*365);
-          const fa=fcell.address; pcell.value={formula:'IF('+fa+'>0,'+fa+'+'+days+'," ")'}; pcell.numFmt='dd.mm.yyyy'; }
+          const fa=fcell.address; pcell.value={formula:'IF('+fa+'>0,'+fa+'+'+days+'," ")'}; pcell.numFmt='dd.mm.yyyy';
+          // дата окончания для подсветки
+          const exp=new Date(d); exp.setDate(exp.getDate()+days);
+          const diff=Math.round((exp-TODAY0)/(1000*60*60*24));
+          if(diff<0) hiCells.push({c, fill:RED_HI, font:RED_FONT});      // истекло — красным
+          else if(diff<40) hiCells.push({c, fill:YEL_HI, font:YEL_FONT}); // скоро (за 40 дней) — жёлтым
+        }
       }
     });
     [fr,pr].forEach(r=>{ for(let c=1;c<=3+NC;c++){ const cell=ws.getCell(r,c);
       cell.border=border; cell.alignment={horizontal:'center',vertical:'middle'};
       if(c>=4){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:dataFill(c-4)}}; cell.font={size:9,name:'Calibri'}; }
     }});
+    // подсветка дат окончания (поверх зелёной заливки), строка «Планируемая»
+    hiCells.forEach(h=>{ const cell=ws.getCell(pr,h.c);
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:h.fill}};
+      cell.font={size:9,name:'Calibri',bold:true,color:{argb:h.font}};
+    });
     ws.getCell(fr,1).font={size:8,italic:true,name:'Calibri'};
     ws.getCell(pr,1).font={size:8,italic:true,name:'Calibri'};
     ws.getCell(fr,2).font={bold:true,size:10,name:'Calibri'};
