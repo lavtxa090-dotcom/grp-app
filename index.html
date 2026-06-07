@@ -194,7 +194,8 @@ body{color-scheme:light}
       <div class="auth-user-name" id="sidebar-user-name">—</div>
       <div class="auth-user-role" id="sidebar-user-role">—</div>
     </div>
-    <button class="btn-icon btn-sm" style="margin-left:auto;font-size:11px;padding:4px 8px" onclick="doLogout()" title="Выйти">⏏</button>
+    <button class="btn-icon btn-sm" style="margin-left:auto;font-size:13px;padding:4px 8px" onclick="openChangePass()" title="Сменить пароль">🔑</button>
+    <button class="btn-icon btn-sm" style="font-size:11px;padding:4px 8px" onclick="doLogout()" title="Выйти">⏏</button>
   </div>
   <nav class="sidebar-nav">
     <div class="nav-section">Общее</div>
@@ -3085,29 +3086,26 @@ function buildNav(role){
 // ============ CHANGE PASSWORD ============
 // Static employee list for auth - always available regardless of Firebase state
 const AUTH_EMPLOYEES = [
-  {name:'Бакро Александр Вячеславович',tab:'00771',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Бахирев Николай Викторович',tab:'00057',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Биктимиров Руслан Расимович',tab:'01126',pos:'Мастер по нефтеотдаче',role:'master'},
   {name:'Булычев Денис Николаевич',tab:'00261',pos:'Оператор по ГРП',role:'worker'},
   {name:'Гариев Ильнур Радикович',tab:'01224',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Гергерт Николай Николаевич',tab:'01723',pos:'Оператор по ГРП',role:'worker'},
   {name:'Данилов Андрей Иванович',tab:'01373',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Зверев Александр Леонидович',tab:'00946',pos:'Машинист парового агрегата',role:'worker'},
+  {name:'Зверев Александр Леонидович',tab:'00946',pos:'Машинист ППДУ',role:'worker'},
   {name:'Иванов Павел Вадимович',tab:'01253',pos:'Оператор по ГРП',role:'worker'},
   {name:'Кондратенко Виктор Александрович',tab:'00521',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Краснояров Евгений Геннадьевич',tab:'00576',pos:'Оператор по ГРП',role:'worker'},
   {name:'Липатников Денис Александрович',tab:'00799',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Мирошниченко Дмитрий Анатольевич',tab:'1126',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker'},
   {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker'},
   {name:'Потлов Сергей Анатольевич',tab:'01149',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Попов Александр Геннадьевич',tab:'01163',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Саликов Ришат Шабикович',tab:'01726',pos:'Оператор по ГРП',role:'worker'},
   {name:'Сапрыкин Иван Владимирович',tab:'00090',pos:'Оператор по ГРП',role:'worker'},
   {name:'Сокол Николай Владимирович',tab:'01146',pos:'Оператор по ГРП',role:'worker'},
   {name:'Стипурин Григорий Васильевич',tab:'01428',pos:'Оператор по ГРП',role:'worker'},
   {name:'Сухоносов Виталий Алексеевич',tab:'00823',pos:'Оператор по ГРП',role:'worker'},
   {name:'Траньков Алексей Олегович',tab:'01374',pos:'Мастер бригады',role:'master'},
   {name:'Шагаев Данияр Геннадьевич',tab:'01372',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Яловец Николай Вадимович',tab:'0991',pos:'Оператор по ГРП',role:'worker'},
 ];
 
 // Firebase helpers
@@ -3292,6 +3290,7 @@ function initFirebase(){
         // No user - show auth screen
         const as = document.getElementById('auth-screen');
         if(as) as.classList.remove('hidden');
+        loadPublicRoster();   // подтянуть актуальный справочник из базы (без входа)
         fillAuthSelects(); // Refresh selects with latest employees
       }
     });
@@ -3446,6 +3445,17 @@ function loadAllData(){
           } else if(typeof data === 'object'){
             const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b));
             APP[col] = keys.map(k=>data[k]).filter(v=>v!=null);
+          }
+          // кэшируем актуальный список сотрудников, чтобы экран входа (до авторизации) показывал его
+          if(col==='employees' && Array.isArray(APP.employees) && APP.employees.length){
+            try{ localStorage.setItem('grp_roster', JSON.stringify(APP.employees)); }catch(_){}
+            // публикуем «лёгкий» справочник в узел, читаемый без входа
+            if(auth && auth.currentUser){
+              try{ db.ref('roster_public').set(APP.employees.map(e=>({
+                name:e.name||'', tab:e.tab||'', pos:e.pos||'', role:e.role||'worker', status:e.status||''
+              }))); }catch(_){}
+            }
+            fillAuthSelects();
           }
         }
         // If data is null - user deleted everything, keep APP empty, don't restore
@@ -3692,6 +3702,7 @@ function renderWorkerHome(){
         '<div style="font-size:13px;color:var(--text2);margin-top:2px">' + (emp.pos||'') + ' · Таб. ' + (emp.tab||'—') + '</div>' +
       '</div>' +
       (sick ? '<div class="alert alert-red" style="margin:0;padding:8px 14px">🏥 Больничный открыт с ' + fmt(sick.dateStart) + '</div>' : '') +
+      '<button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openChangePass()">🔑 Сменить пароль</button>' +
     '</div>' +
 
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">' +
@@ -5002,18 +5013,42 @@ function calcAutoFill(){
 
   calcSimple();
 }
+let PUBLIC_ROSTER = null;
+function loadPublicRoster(){
+  // Читаем «лёгкий» справочник сотрудников из узла, открытого на чтение без входа.
+  // Если узел/правило не настроены — тихо игнорируем, останется кэш/зашитый список.
+  try{
+    if(!db) return;
+    db.ref('roster_public').get().then(snap=>{
+      const v = snap.val();
+      if(Array.isArray(v) && v.length){
+        PUBLIC_ROSTER = v;
+        try{ localStorage.setItem('grp_roster', JSON.stringify(v)); }catch(_){}
+        fillAuthSelects();
+      }
+    }).catch(()=>{ /* нет доступа/узла — ок, используем запасной список */ });
+  }catch(_){}
+}
 function fillAuthSelects(){
-  // Primary: use Firebase employees (reflects master's changes)
-  // Fallback: use AUTH_EMPLOYEES only if Firebase hasn't loaded yet
-  let list;
+  // Источник списка для входа/регистрации (экран показывается ДО авторизации,
+  // а правила Firebase не дают читать базу без входа):
+  //   1) живой список сотрудников (после входа)
+  //   2) публичный справочник roster_public (если настроен)
+  //   3) кэш последнего успешного входа (localStorage)
+  //   4) зашитый в код запасной список
+  let list = null;
   if(APP.employees && APP.employees.length > 0){
-    // Firebase loaded - use exactly what master configured
-    list = APP.employees.filter(e=>e.status !== 'Уволен');
+    list = APP.employees;
+  } else if(Array.isArray(PUBLIC_ROSTER) && PUBLIC_ROSTER.length){
+    list = PUBLIC_ROSTER;
   } else {
-    // Firebase not loaded yet - use hardcoded fallback
-    list = AUTH_EMPLOYEES;
+    try{ const c=JSON.parse(localStorage.getItem('grp_roster')||'null'); if(Array.isArray(c)&&c.length) list=c; }catch(_){}
   }
-  const opts = list.map(e=>`<option value="${e.name}">${e.name} — ${e.pos}</option>`).join('');
+  if(!list) list = AUTH_EMPLOYEES;
+  const fired = e => ((e && e.status!=null ? e.status : '').toString().trim().toLowerCase()==='уволен');
+  list = list.filter(e=>e && e.name && !fired(e))
+             .slice().sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  const opts = list.map(e=>`<option value="${e.name}">${e.name} — ${e.pos||''}</option>`).join('');
   const ln = document.getElementById('login-name');
   const rn = document.getElementById('reg-name');
   if(ln) ln.innerHTML='<option value="">— Выберите из списка —</option>'+opts;
