@@ -271,6 +271,7 @@ body{color-scheme:light}
         <div class="section-title">Сотрудники бригады</div>
         <div style="margin-left:auto;display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" onclick="fixEmployeeNames()" title="Исправить опечатки в именах">🔧 Исправить имена</button>
+          <button class="btn btn-secondary btn-sm" onclick="syncBrigadeRoster()" title="Привести состав к официальному списку Флот 2 Бригада 2">🔄 Обновить состав</button>
           <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-emp')">+ Добавить</button>
         </div>
       </div>
@@ -2118,6 +2119,82 @@ function saveEmployee(){
   saveToFirebase('employees', APP.employees);
   saveToFirebase('training', APP.training);
   saveToFirebase('vacations', APP.vacations);
+}
+
+// Официальный состав Флот 2 Бригада 2 (источник: штатный список на 27.05.2026)
+const BRIGADE_ROSTER = [
+  {name:'Булычев Денис Николаевич',tab:'00261',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Гариев Ильнур Радикович',tab:'01224',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Гергерт Николай Николаевич',tab:'01723',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Данилов Андрей Иванович',tab:'01373',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Зверев Александр Леонидович',tab:'00946',pos:'Машинист ППДУ',role:'worker'},
+  {name:'Иванов Павел Вадимович',tab:'01253',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Кондратенко Виктор Александрович',tab:'00521',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Липатников Денис Александрович',tab:'00799',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Мирошниченко Дмитрий Анатольевич',tab:'1126',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Потлов Сергей Анатольевич',tab:'01149',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Саликов Ришат Шабикович',tab:'01726',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Сапрыкин Иван Владимирович',tab:'00090',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Сокол Николай Владимирович',tab:'01146',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Стипурин Григорий Васильевич',tab:'01428',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Сухоносов Виталий Алексеевич',tab:'00823',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Траньков Алексей Олегович',tab:'01374',pos:'Мастер бригады',role:'master'},
+  {name:'Шагаев Данияр Геннадьевич',tab:'01372',pos:'Оператор по ГРП',role:'worker'},
+];
+
+// Привести список сотрудников в базе к официальному составу.
+// Существующих обновляет (таб/должность/роль), сохраняя статус; недостающих добавляет
+// с шаблоном обучения/отпусков; отсутствующих в официальном списке — удаляет.
+function syncBrigadeRoster(){
+  if(APP.role!=='master') return alert('Доступно только мастеру.');
+  const official = BRIGADE_ROSTER.map(e=>e.name);
+  const cur = APP.employees||[];
+  const curNames = cur.map(e=>e.name);
+  const toAdd = BRIGADE_ROSTER.filter(e=>!curNames.includes(e.name));
+  const toRemove = cur.filter(e=>!official.includes(e.name));
+  const msg = 'Обновить состав бригады по официальному списку?\n\n'+
+    'Добавить ('+toAdd.length+'): '+(toAdd.map(e=>e.name).join(', ')||'—')+'\n\n'+
+    'Удалить ('+toRemove.length+'): '+(toRemove.map(e=>e.name).join(', ')||'—')+'\n\n'+
+    'У остальных обновятся табельные и должности (телефоны и статусы сохранятся).';
+  if(!confirm(msg)) return;
+
+  // 1) обновить существующих
+  cur.forEach(e=>{
+    const o = BRIGADE_ROSTER.find(r=>r.name===e.name);
+    if(o){ e.tab=o.tab; e.pos=o.pos; e.role=o.role; if(!e.status) e.status='Активен'; }
+  });
+  // 2) удалить отсутствующих в официальном списке
+  const removeNames = toRemove.map(e=>e.name);
+  APP.employees = cur.filter(e=>!removeNames.includes(e.name));
+  // их обучения/отпуска тоже убираем, чтобы не висели
+  APP.training = (APP.training||[]).filter(t=>!removeNames.includes(t.person));
+  APP.vacations = (APP.vacations||[]).filter(v=>!removeNames.includes(v.person));
+  // 3) добавить недостающих с шаблонами
+  const TRAIN_TYPES = [{"type":"Медицинский осмотр","years":1},{"type":"Психиатрическое освидетельствование","years":5},{"type":"Противопожарный инструктаж","years":1},{"type":"Основная профессия","years":1},{"type":"ПСЖ","years":1},{"type":"20 часовая программа","years":1},{"type":"Охрана труда","years":1},{"type":"Электробезопасность","years":1},{"type":"ПДД","years":1},{"type":"Сосуды под давлением","years":2},{"type":"Высота","years":3},{"type":"ПромБ","years":5},{"type":"Оказание первой доврачебной помощи","years":3},{"type":"ГНВП","years":2},{"type":"Охрана труда программа А","years":3},{"type":"СИЗ","years":1},{"type":"Обращение с отходами","years":5},{"type":"Обращение с кислотой","years":5},{"type":"ГВС","years":5}];
+  toAdd.forEach(o=>{
+    APP.employees.push({name:o.name, pos:o.pos, tab:o.tab, role:o.role, status:'Активен'});
+    TRAIN_TYPES.forEach(t=>APP.training.push({person:o.name, type:t.type, date:'', years:t.years}));
+    APP.vacations.push({person:o.name, tab:o.tab, days:20, date:'', actual:'', note:'Запланировать'});
+    APP.vacations.push({person:o.name, tab:o.tab, days:20, date:'', actual:'', note:'Запланировать'});
+    APP.vacations.push({person:o.name, tab:o.tab, days:19, date:'', actual:'', note:'Запланировать'});
+  });
+  // 4) сортировка по алфавиту
+  APP.employees.sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+
+  saveToFirebase('employees', APP.employees);
+  saveToFirebase('training', APP.training);
+  saveToFirebase('vacations', APP.vacations);
+  // обновить публичный справочник и кэш сразу
+  try{ localStorage.setItem('grp_roster', JSON.stringify(APP.employees)); }catch(_){}
+  if(typeof db!=='undefined' && db && auth && auth.currentUser){
+    try{ db.ref('roster_public').set(APP.employees.map(e=>({name:e.name,tab:e.tab||'',pos:e.pos||'',role:e.role||'worker',status:e.status||''}))); }catch(_){}
+  }
+  renderEmployees();
+  fillAuthSelects();
+  alert('Готово. Состав приведён к официальному списку: '+APP.employees.length+' человек.');
 }
 
 // DOCS
