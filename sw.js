@@ -1,4 +1,4 @@
-const CACHE_NAME = 'grp-brigade-v10';
+const CACHE_NAME = 'grp-brigade-v11';
 const urlsToCache = [
   '/grp-app/',
   '/grp-app/index.html',
@@ -28,24 +28,25 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = event.request.url;
   // Never cache Firebase/Google requests
-  if (url.includes('firebase') || url.includes('googleapis') || 
+  if (url.includes('firebase') || url.includes('googleapis') ||
       url.includes('gstatic') || url.includes('identitytoolkit')) {
     return fetch(event.request);
   }
-  // For HTML files - always fetch from network first (cache-busting)
+  // For HTML files - ALWAYS fetch fresh from network, bypassing the HTTP cache.
+  // This guarantees a new index.html shows up without manual cache clearing.
   if (url.endsWith('.html') || url.endsWith('/')) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then(response => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(() => caches.match(event.request)) // офлайн — отдаём из кэша
     );
     return;
   }
-  // For other assets - cache first
+  // For other assets (icons, manifest) - cache first
   event.respondWith(
     caches.match(event.request)
       .then(response => response || fetch(event.request))
