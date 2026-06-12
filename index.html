@@ -529,7 +529,8 @@ body{color-scheme:light}
         <div class="section-header">
           <div class="section-title">Сводная таблица</div>
           <span style="font-size:12px;color:var(--text2)">Заполнено: <b id="moto-fill-pct" style="color:var(--accent);font-family:var(--font-m)">0%</b></span>
-          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openAddMoto()">+ Добавить</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="clearMotoDate()" title="Обнулить показания за выбранную дату">🧹 Очистить за дату</button>
+          <button class="btn btn-secondary btn-sm" onclick="openAddMoto()">+ Добавить</button>
         </div>
         <div class="section-body">
           <div class="progress-bar" style="margin-bottom:16px"><div class="progress-fill" id="moto-fill-bar" style="background:var(--green);width:0%"></div></div>
@@ -2406,9 +2407,14 @@ function saveMotoMonths(){ // имя оставлено — вызывается
 }
 function initMotoPeriods(){
   if(!APP.motoByDate || typeof APP.motoByDate!=='object' || Array.isArray(APP.motoByDate)) APP.motoByDate={};
-  // миграция старого плоского списка в сегодняшнюю дату (чтобы не потерять)
+  // миграция старого плоского списка: раскладываем по датам их последнего обновления,
+  // чтобы сегодняшняя дата не оказалась занята старыми показаниями
   if(!Object.keys(APP.motoByDate).length && Array.isArray(APP.motoData) && APP.motoData.length){
-    APP.motoByDate[dateKey()]=APP.motoData.map(m=>({...m}));
+    APP.motoData.forEach(m=>{
+      const k=(m.updatedAt && /^\d{4}-\d{2}-\d{2}$/.test(m.updatedAt)) ? m.updatedAt : '2026-06-06';
+      if(!Array.isArray(APP.motoByDate[k])) APP.motoByDate[k]=[];
+      APP.motoByDate[k].push({...m});
+    });
   }
   const dEl=document.getElementById('moto-date');
   let target = (dEl && dEl.value) || APP.motoDate;
@@ -2574,7 +2580,29 @@ function renderMotoMaster(){
   const pct=APP.motoData.length?Math.round(filled/APP.motoData.length*100):0;
   document.getElementById('moto-fill-pct').textContent=pct+'%';
   document.getElementById('moto-fill-bar').style.width=pct+'%';
-  document.getElementById('moto-master-body').innerHTML=APP.motoData.map((m,i)=>`<tr style="${m.unused?'background:#e5e5e5;color:#777':''}"><td class="mono" style="color:var(--text3)">${i+1}</td><td>${m.name}<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-m)">${m.gov_tractor}</span>${(function(){const p=[];if(m.spareWheel==='нет')p.push('нет запаски');if(m.ac==='не исправен')p.push('кондиционер');if(m.pzhd==='не работает')p.push('ПЖД');if(m.pzhd2==='не работает')p.push('ПЖД2');if(m.dryFan==='не работает')p.push('сухой фен');if(m.emergencyStop==='не исправен')p.push('авар.глушение');if(m.pzhd==='не работает')p.push('ПЖД');return p.length?'<br><span style=\'font-size:10px;color:var(--red);font-family:var(--font-m)\'>⚠ '+p.join(', ')+'</span>':'';})()}</td><td class="mono">${m.km||'—'}</td><td class="mono">${m.mh_tractor||'—'}</td><td style="font-size:12px;color:var(--text2);font-family:var(--font-m)">${m.gov_unit}</td><td class="mono">${m.mh_unit||'—'}</td><td><span class="badge ${m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray'}">${m.status}</span></td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openMotoEdit(${i})">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delMotoUnit(${i})">✕</button></td></tr>`).join('');
+  const selDate = APP.motoDate || (document.getElementById('moto-date')&&document.getElementById('moto-date').value) || '';
+  // метка свежести: кто и когда внёс показания за выбранную дату
+  const freshTag = (m)=>{
+    if(m.updatedAt && m.updatedBy){
+      if(m.updatedAt===selDate)
+        return `<br><span style="font-size:10px;font-family:var(--font-m);color:var(--green)">✓ внёс: ${m.updatedBy}</span>`;
+      return `<br><span style="font-size:10px;font-family:var(--font-m);color:#c77f00">⏱ старые данные (${m.updatedAt}${m.updatedBy?' · '+m.updatedBy:''})</span>`;
+    }
+    return `<br><span style="font-size:10px;font-family:var(--font-m);color:var(--text3)">— не внесено за ${selDate||'дату'}</span>`;
+  };
+  document.getElementById('moto-master-body').innerHTML=APP.motoData.map((m,i)=>`<tr style="${m.unused?'background:#e5e5e5;color:#777':''}"><td class="mono" style="color:var(--text3)">${i+1}</td><td>${m.name}<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-m)">${m.gov_tractor}</span>${(function(){const p=[];if(m.spareWheel==='нет')p.push('нет запаски');if(m.ac==='не исправен')p.push('кондиционер');if(m.pzhd==='не работает')p.push('ПЖД');if(m.pzhd2==='не работает')p.push('ПЖД2');if(m.dryFan==='не работает')p.push('сухой фен');if(m.emergencyStop==='не исправен')p.push('авар.глушение');if(m.pzhd==='не работает')p.push('ПЖД');return p.length?'<br><span style=\'font-size:10px;color:var(--red);font-family:var(--font-m)\'>⚠ '+p.join(', ')+'</span>':'';})()}${freshTag(m)}</td><td class="mono">${m.km||'—'}</td><td class="mono">${m.mh_tractor||'—'}</td><td style="font-size:12px;color:var(--text2);font-family:var(--font-m)">${m.gov_unit}</td><td class="mono">${m.mh_unit||'—'}</td><td><span class="badge ${m.status==='В наличии'?'badge-green':m.status==='Не работает'?'badge-red':'badge-gray'}">${m.status}</span></td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openMotoEdit(${i})">✎</button><button class="btn-icon btn-sm" style="color:var(--red)" onclick="delMotoUnit(${i})">✕</button></td></tr>`).join('');
+}
+// Очистить показания за выбранную дату (если дата засорена старыми данными)
+function clearMotoDate(){
+  const d=APP.motoDate||(document.getElementById('moto-date')&&document.getElementById('moto-date').value);
+  if(!d) return;
+  if(!confirm('Очистить все показания за '+d+'? Техника останется, цифры обнулятся.')) return;
+  APP.motoData.forEach(m=>{ m.km='';m.mh_tractor='';m.mh_unit='';m.status='В наличии';
+    m.spareWheel='есть';m.ac='исправен';m.heater='исправен';m.emergencyStop='исправен';
+    m.pzhd='работает';m.pzhd2='нет';m.dryFan='нет'; delete m.updatedBy; delete m.updatedAt; delete m.filled; });
+  saveMotoMonths();
+  renderMotoMaster();
+  showToast('Показания за '+d+' очищены','green');
 }
 function openMotoEdit(i){const m=APP.motoData[i];document.getElementById('em-idx').value=i;document.getElementById('em-title').textContent=m.name+' ('+m.gov_tractor+')';document.getElementById('em-km').value=m.km||'';document.getElementById('em-mh-t').value=m.mh_tractor||'';document.getElementById('em-mh-u').value=m.mh_unit||'';document.getElementById('em-status').value=m.status;openModal('modal-edit-moto')}
 function saveMotoEdit(){const i=parseInt(document.getElementById('em-idx').value);APP.motoData[i].km=document.getElementById('em-km').value;APP.motoData[i].mh_tractor=document.getElementById('em-mh-t').value;APP.motoData[i].mh_unit=document.getElementById('em-mh-u').value;APP.motoData[i].status=document.getElementById('em-status').value;closeModal('modal-edit-moto');renderMotoMaster()
