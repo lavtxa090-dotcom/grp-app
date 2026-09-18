@@ -292,7 +292,7 @@ body{color-scheme:light}
         </div>
       </div>
       <div class="section-body">
-        <table class="data-table"><thead><tr><th>Документ</th><th>Тип</th><th>Дата</th><th>Статус</th><th>Ответственный</th><th></th></tr></thead><tbody id="docs-table"></tbody></table>
+        <table class="data-table"><thead><tr><th>Документ</th><th>Тип</th><th>Дата</th><th>Статус</th><th>Ответственный</th><th style="width:50px">Файл</th><th></th></tr></thead><tbody id="docs-table"></tbody></table>
       </div>
     </div>
   </div>
@@ -677,9 +677,10 @@ body{color-scheme:light}
       <div class="form-group"><label class="form-label">Статус</label><select class="form-select" id="nd-status"><option>Ожидает</option><option>Подписан</option><option>Истёк</option></select></div>
       <div class="form-group"><label class="form-label">Ответственный</label><input type="text" class="form-input" id="nd-owner"></div>
     </div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Прикрепить файл (до 3 МБ)</label><input type="file" class="form-input" id="nd-file" accept="image/*,.pdf,.doc,.docx" style="padding:4px"></div></div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-add-doc')">Отмена</button>
-      <button class="btn btn-primary" onclick="saveDoc()">Сохранить</button>
+      <button class="btn btn-primary" id="nd-save-btn" onclick="saveDoc()">Сохранить</button>
     </div>
   </div>
 </div>
@@ -2153,18 +2154,14 @@ function syncBrigadeRoster(){
   const cur = APP.employees||[];
   const curNames = cur.map(e=>e.name);
   const toAdd = BRIGADE_ROSTER.filter(e=>!curNames.includes(e.name));
-  const toRemove = cur.filter(e=>!official.includes(e.name));
 
   // 1) обновить существующих
   cur.forEach(e=>{
     const o = BRIGADE_ROSTER.find(r=>r.name===e.name);
     if(o){ e.tab=o.tab; e.pos=o.pos; e.role=o.role; if(!e.status) e.status='Активен'; }
   });
-  // 2) удалить отсутствующих в официальном списке
-  const removeNames = toRemove.map(e=>e.name);
-  APP.employees = cur.filter(e=>!removeNames.includes(e.name));
-  APP.training = (APP.training||[]).filter(t=>!removeNames.includes(t.person));
-  APP.vacations = (APP.vacations||[]).filter(v=>!removeNames.includes(v.person));
+  // 2) добавленные вручную сотрудники больше не удаляются!
+
   // 3) добавить недостающих с шаблонами
   const TRAIN_TYPES = [{"type":"Медицинский осмотр","years":1},{"type":"Психиатрическое освидетельствование","years":5},{"type":"Противопожарный инструктаж","years":1},{"type":"Основная профессия","years":1},{"type":"ПСЖ","years":1},{"type":"20 часовая программа","years":1},{"type":"Охрана труда","years":1},{"type":"Электробезопасность","years":1},{"type":"ПДД","years":1},{"type":"Сосуды под давлением","years":2},{"type":"Высота","years":3},{"type":"ПромБ","years":5},{"type":"Оказание первой доврачебной помощи","years":3},{"type":"ГНВП","years":2},{"type":"Охрана труда программа А","years":3},{"type":"СИЗ","years":1},{"type":"Обращение с отходами","years":5},{"type":"Обращение с кислотой","years":5},{"type":"ГВС","years":5}];
   toAdd.forEach(o=>{
@@ -2177,7 +2174,7 @@ function syncBrigadeRoster(){
   // 4) сортировка по алфавиту
   APP.employees.sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
-  if(toAdd.length || toRemove.length){
+  if(toAdd.length){
     saveToFirebase('employees', APP.employees);
     saveToFirebase('training', APP.training);
     saveToFirebase('vacations', APP.vacations);
@@ -2188,7 +2185,7 @@ function syncBrigadeRoster(){
     renderEmployees();
     fillAuthSelects();
     // Тихое уведомление вместо alert
-    if(typeof showToast==='function') showToast('Состав бригады обновлён: +'+toAdd.length+' / −'+toRemove.length, 'green');
+    if(typeof showToast==='function') showToast('В бригаду добавлены сотрудники по списку: +'+toAdd.length, 'green');
   }
 }
 
@@ -2197,7 +2194,7 @@ function maybePromptRosterSync(){
   if(APP.role!=='master') return;
   const cur=(APP.employees||[]).map(e=>e.name);
   const official=BRIGADE_ROSTER.map(e=>e.name);
-  const mismatch = cur.some(n=>!official.includes(n)) || official.some(n=>!cur.includes(n));
+  const mismatch = official.some(n=>!cur.includes(n)); // проверяем только недостающих
   if(mismatch) syncBrigadeRoster();
 }
 
@@ -2205,9 +2202,47 @@ function maybePromptRosterSync(){
 function renderDocs(){
   const f=document.getElementById('doc-filter').value;
   const list=f?APP.docs.filter(d=>d.status===f):APP.docs;
-  document.getElementById('docs-table').innerHTML=list.map((d)=>{const di=APP.docs.indexOf(d);return`<tr><td style="font-weight:500">${d.name}</td><td style="color:var(--text2);font-size:12px">${d.type}</td><td class="mono" style="font-size:12px">${fmt(d.date)}</td><td><span class="badge ${d.status==='Подписан'?'badge-green':d.status==='Ожидает'?'badge-yellow':'badge-red'}">${d.status}</span></td><td style="color:var(--text2);font-size:12px">${d.owner}</td><td style="display:flex;gap:4px;align-items:center"><select class="form-select" style="font-size:11px;padding:3px 6px;width:auto" onchange="APP.docs[${di}].status=this.value;renderDocs();saveToFirebase('docs',APP.docs)"><option ${d.status==='Ожидает'?'selected':''}>Ожидает</option><option ${d.status==='Подписан'?'selected':''}>Подписан</option><option ${d.status==='Истёк'?'selected':''}>Истёк</option></select><button class="btn-icon btn-sm" style="color:var(--red)" onclick="APP.docs.splice(${di},1);renderDocs();saveToFirebase('docs',APP.docs)" title="Удалить">✕</button></td></tr>`;}).join('');
+  document.getElementById('docs-table').innerHTML=list.map((d)=>{const di=APP.docs.indexOf(d);return`<tr><td style="font-weight:500">${d.name}</td><td style="color:var(--text2);font-size:12px">${d.type}</td><td class="mono" style="font-size:12px">${fmt(d.date)}</td><td><span class="badge ${d.status==='Подписан'?'badge-green':d.status==='Ожидает'?'badge-yellow':'badge-red'}">${d.status}</span></td><td style="color:var(--text2);font-size:12px">${d.owner}</td><td>${d.fileData ? `<a href="${d.fileData}" download="${d.fileName||'document'}" style="font-size:18px;text-decoration:none;" title="Скачать файл">📎</a>` : '<span style="color:var(--text3);font-size:12px">—</span>'}</td><td style="display:flex;gap:4px;align-items:center"><select class="form-select" style="font-size:11px;padding:3px 6px;width:auto" onchange="APP.docs[${di}].status=this.value;renderDocs();saveToFirebase('docs',APP.docs)"><option ${d.status==='Ожидает'?'selected':''}>Ожидает</option><option ${d.status==='Подписан'?'selected':''}>Подписан</option><option ${d.status==='Истёк'?'selected':''}>Истёк</option></select><button class="btn-icon btn-sm" style="color:var(--red)" onclick="if(confirm('Удалить документ?')){APP.docs.splice(${di},1);renderDocs();saveToFirebase('docs',APP.docs)}" title="Удалить">✕</button></td></tr>`;}).join('');
 }
-function saveDoc(){APP.docs.push({name:document.getElementById('nd-name').value,type:document.getElementById('nd-type').value,date:document.getElementById('nd-date').value,status:document.getElementById('nd-status').value,owner:document.getElementById('nd-owner').value});closeModal('modal-add-doc');renderDocs();saveToFirebase('docs',APP.docs)}
+
+function saveDoc(){
+  const fileInput = document.getElementById('nd-file');
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  const name = document.getElementById('nd-name').value;
+  const type = document.getElementById('nd-type').value;
+  const date = document.getElementById('nd-date').value;
+  const status = document.getElementById('nd-status').value;
+  const owner = document.getElementById('nd-owner').value;
+
+  if(!name) return alert('Введите название');
+
+  if(file){
+    if(file.size > 3.5 * 1024 * 1024){
+      return alert('Файл слишком большой! Максимум 3.5 МБ.');
+    }
+    const btn = document.getElementById('nd-save-btn');
+    if(btn) btn.textContent = 'Сохранение...';
+    
+    const reader = new FileReader();
+    reader.onload = function(e){
+      APP.docs.push({name, type, date, status, owner, fileData: e.target.result, fileName: file.name});
+      finishSaveDoc();
+    };
+    reader.readAsDataURL(file);
+  } else {
+    APP.docs.push({name, type, date, status, owner});
+    finishSaveDoc();
+  }
+
+  function finishSaveDoc(){
+    const btn = document.getElementById('nd-save-btn');
+    if(btn) btn.textContent = 'Сохранить';
+    if(fileInput) fileInput.value = '';
+    closeModal('modal-add-doc');
+    renderDocs();
+    saveToFirebase('docs',APP.docs);
+  }
+}
 
 // FUEL
 function renderFuel(){
