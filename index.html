@@ -2115,10 +2115,11 @@ function saveEmployee(){
   
   closeModal('modal-add-emp');
   renderEmployees();
-  fillAuthSelects();
   saveToFirebase('employees', APP.employees);
   saveToFirebase('training', APP.training);
   saveToFirebase('vacations', APP.vacations);
+  if(typeof syncPublicRoster === 'function') syncPublicRoster();
+  fillAuthSelects();
 }
 
 // Официальный состав Флот 2 Бригада 2 (источник: штатный список на 27.05.2026)
@@ -3358,6 +3359,18 @@ const AUTH_EMPLOYEES = [
 // ============ FIREBASE DATA SYNC ============
 // Firebase saves are handled directly in each function
 
+// Helper for email generation for Firebase Auth
+function getEmpAuthEmail(emp, fallbackName){
+  if(emp && emp.tab && String(emp.tab).trim()){
+    const cleanTab = String(emp.tab).trim().replace(/[^a-zA-Z0-9_-]/g,'');
+    if(cleanTab) return cleanTab + '@grp.brigade';
+  }
+  const nm = ((emp && emp.name) || fallbackName || '').trim();
+  const cyrMap = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+  const translit = nm.toLowerCase().split('').map(c => cyrMap[c] !== undefined ? cyrMap[c] : c).join('').replace(/[^a-z0-9_-]/g,'');
+  return (translit || 'user' + Math.abs(nm.split('').reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0))) + '@grp.brigade';
+}
+
 // ============ CHANGE PASSWORD ============
 function openChangePass(){
   document.getElementById('cp-old').value='';
@@ -3381,10 +3394,10 @@ function changePassword(){
   if(!auth||!auth.currentUser){ errEl.textContent='Ошибка авторизации'; errEl.classList.add('show'); return; }
 
   const user = auth.currentUser;
-  const emp = APP.employees.find(e=>e.name===APP.currentUser);
+  const emp = (Array.isArray(APP.employees) ? APP.employees.find(e=>e.name===APP.currentUser) : null) || resolveAuthEmp(APP.currentUser);
   if(!emp){ errEl.textContent='Пользователь не найден'; errEl.classList.add('show'); return; }
 
-  const email = (emp.tab||emp.name.replace(/\s/g,'').toLowerCase()) + '@grp.brigade';
+  const email = getEmpAuthEmail(emp, APP.currentUser);
 
   // Re-authenticate first, then change password
   const credential = firebase.auth.EmailAuthProvider.credential(email, oldPass);
@@ -3471,6 +3484,7 @@ function initFirebase(){
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
     auth = firebase.auth();
+    loadPublicRoster();
     
     // Auth state listener
     auth.onAuthStateChanged(user=>{
@@ -3486,7 +3500,7 @@ function initFirebase(){
             // НЕ выкидываем авторизованного пользователя — восстанавливаем сессию.
             const guessTab = (user.email||'').split('@')[0];
             const ge = resolveAuthByTab(guessTab) ||
-                       getAuthRoster().find(e=>e && e.name===user.displayName) || null;
+                       resolveAuthEmp(user.displayName) || null;
             const nm = ge ? ge.name : (user.displayName || 'Сотрудник');
             const rl = ge ? (ge.role||'worker') : 'worker';
             if(db) db.ref('users/'+user.uid).set({name:nm, role:rl, tab:guessTab}).catch(()=>{});
@@ -3558,18 +3572,18 @@ function doLogin(){
   if(!pass) return showAuthError('Введите пароль');
   const emp = resolveAuthEmp(name);
   if(!emp) return showAuthError('Сотрудник не найден');
-  // Use email = tab@grp.local for Firebase Auth
-  const email = (emp.tab||name.replace(/\s/g,'').toLowerCase()) + '@grp.brigade';
+  // Use clean ASCII email for Firebase Auth
+  const email = getEmpAuthEmail(emp, name);
   auth.signInWithEmailAndPassword(email, pass)
     .then(cred=>{
-      const session = {name, role: emp.role};
+      const session = {name, role: emp.role || 'worker'};
       if(db){
         db.ref('users/'+cred.user.uid).get().then(snap=>{
           const profile = snap.val();
           const s = profile ? {name:profile.name, role:profile.role} : session;
           applySession(s); loadAllData();
-        }).catch(()=>{ applySession(session); });
-      } else { applySession(session); }
+        }).catch(()=>{ applySession(session); loadAllData(); });
+      } else { applySession(session); loadAllData(); }
     })
     .catch(err=>{
       if(err.code==='auth/user-not-found'||err.code==='auth/invalid-credential'||err.code==='auth/invalid-login-credentials')
@@ -3589,17 +3603,18 @@ function doRegister(){
   if(pass!==pass2) return showAuthError('Пароли не совпадают');
   const emp = resolveAuthEmp(name);
   if(!emp) return showAuthError('Сотрудник не найден');
-  const email = (emp.tab||name.replace(/\s/g,'').toLowerCase()) + '@grp.brigade';
+  const email = getEmpAuthEmail(emp, name);
   auth.createUserWithEmailAndPassword(email, pass)
     .then(cred=>{
-      const session = {name, role: emp.role};
+      const session = {name, role: emp.role || 'worker'};
       // Save profile to DB then apply session immediately
       if(db){
-        db.ref('users/'+cred.user.uid).set({name, role:emp.role, tab:emp.tab||''})
+        db.ref('users/'+cred.user.uid).set({name, role:emp.role || 'worker', tab:emp.tab||''})
           .then(()=>{ applySession(session); loadAllData(); })
-          .catch(()=>{ applySession(session); }); // apply even if DB write fails
+          .catch(()=>{ applySession(session); loadAllData(); }); // apply even if DB write fails
       } else {
         applySession(session);
+        loadAllData();
       }
     })
     .catch(err=>{
@@ -3654,8 +3669,12 @@ function loadAllData(){
             const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b));
             APP[col] = keys.map(k=>data[k]).filter(v=>v!=null);
           }
-          // (Список входа берётся из зашитого BRIGADE_ROSTER, поэтому автопубликацию
-          //  в roster_public убрали — иначе старые вкладки возвращали старый состав.)
+          if(col === 'employees'){
+            if(APP.role === 'master'){
+              syncPublicRoster();
+            }
+            fillAuthSelects();
+          }
         }
         // If data is null - user deleted everything, keep APP empty, don't restore
         if(data === null){
@@ -3823,11 +3842,13 @@ const _origSaveEmployee = saveEmployee;
 saveEmployee = function(){
   _origSaveEmployee();
   saveToFirebase('employees', APP.employees);
+  if(typeof syncPublicRoster === 'function') syncPublicRoster();
 };
 const _origSaveEditEmployee = saveEditEmployee;
 saveEditEmployee = function(){
   _origSaveEditEmployee();
   saveToFirebase('employees', APP.employees);
+  if(typeof syncPublicRoster === 'function') syncPublicRoster();
 };
 const _origDelEmployee = delEmployee;
 delEmployee = function(i){
@@ -3835,6 +3856,7 @@ delEmployee = function(i){
     APP.employees.splice(i,1);
     renderEmployees();
     saveToFirebase('employees', APP.employees);
+    if(typeof syncPublicRoster === 'function') syncPublicRoster();
   }
 };
 const _origAddFuel = addFuel;
@@ -5247,39 +5269,103 @@ function calcAutoFill(){
   calcSimple();
 }
 let PUBLIC_ROSTER = null;
+
+function syncPublicRoster(){
+  if(typeof db!=='undefined' && db && auth && auth.currentUser && Array.isArray(APP.employees) && APP.employees.length){
+    try{
+      const pub = APP.employees.map(e=>({
+        name: e.name,
+        tab: e.tab || '',
+        pos: e.pos || '',
+        role: e.role || 'worker',
+        status: e.status || 'Активен'
+      }));
+      db.ref('roster_public').set(pub).catch(e=>console.warn('syncPublicRoster set error:', e));
+      try{ localStorage.setItem('grp_roster', JSON.stringify(pub)); }catch(_){}
+      PUBLIC_ROSTER = pub;
+      fillAuthSelects();
+    }catch(err){ console.warn('syncPublicRoster error:', err); }
+  }
+}
+
 function loadPublicRoster(){
-  // Читаем «лёгкий» справочник сотрудников из узла, открытого на чтение без входа.
-  // Если узел/правило не настроены — тихо игнорируем, останется кэш/зашитый список.
   try{
     if(!db) return;
-    db.ref('roster_public').get().then(snap=>{
+    db.ref('roster_public').on('value', snap=>{
       const v = snap.val();
-      if(Array.isArray(v) && v.length){
-        PUBLIC_ROSTER = v;
-        try{ localStorage.setItem('grp_roster', JSON.stringify(v)); }catch(_){}
-        fillAuthSelects();
+      if(v){
+        let arr = [];
+        if(Array.isArray(v)) arr = v.filter(Boolean);
+        else if(typeof v === 'object') arr = Object.values(v).filter(Boolean);
+        if(arr.length){
+          PUBLIC_ROSTER = arr;
+          try{ localStorage.setItem('grp_roster', JSON.stringify(arr)); }catch(_){}
+          fillAuthSelects();
+        }
       }
-    }).catch(()=>{ /* нет доступа/узла — ок, используем запасной список */ });
+    });
   }catch(_){}
 }
-// Список сотрудников для экрана входа.
-// ВАЖНО: берём ТОЛЬКО зашитый официальный список (BRIGADE_ROSTER) — он стабилен и верен.
-// Раньше список тянулся из базы/кэша/публичного справочника, но устаревшие данные
-// и параллельные вкладки со старой версией постоянно возвращали старый состав.
-// Теперь экран входа от базы не зависит: что в коде — то и в списке.
+
 function getAuthRoster(){
-  return (typeof BRIGADE_ROSTER!=='undefined' && BRIGADE_ROSTER.length) ? BRIGADE_ROSTER : AUTH_EMPLOYEES;
+  if(Array.isArray(APP.employees) && APP.employees.length > 0){
+    return APP.employees;
+  }
+  if(Array.isArray(PUBLIC_ROSTER) && PUBLIC_ROSTER.length > 0){
+    return PUBLIC_ROSTER;
+  }
+  try{
+    const cached = JSON.parse(localStorage.getItem('grp_roster')||'[]');
+    if(Array.isArray(cached) && cached.length > 0) return cached;
+  }catch(_){}
+  return (typeof BRIGADE_ROSTER!=='undefined' && BRIGADE_ROSTER.length) ? BRIGADE_ROSTER : (typeof AUTH_EMPLOYEES!=='undefined'?AUTH_EMPLOYEES:[]);
 }
-// Найти сотрудника по ФИО в тех же источниках (для входа/регистрации)
+
 function resolveAuthEmp(name){
-  return getAuthRoster().find(e=>e&&e.name===name) || AUTH_EMPLOYEES.find(e=>e.name===name) || null;
+  if(!name) return null;
+  const list = getAuthRoster();
+  let found = list.find(e => e && e.name === name);
+  if(found) return found;
+  if(Array.isArray(APP.employees)){
+    found = APP.employees.find(e => e && e.name === name);
+    if(found) return found;
+  }
+  if(Array.isArray(PUBLIC_ROSTER)){
+    found = PUBLIC_ROSTER.find(e => e && e.name === name);
+    if(found) return found;
+  }
+  if(typeof BRIGADE_ROSTER !== 'undefined' && Array.isArray(BRIGADE_ROSTER)){
+    found = BRIGADE_ROSTER.find(e => e && e.name === name);
+    if(found) return found;
+  }
+  if(typeof AUTH_EMPLOYEES !== 'undefined' && Array.isArray(AUTH_EMPLOYEES)){
+    found = AUTH_EMPLOYEES.find(e => e && e.name === name);
+    if(found) return found;
+  }
+  return null;
 }
-// Найти сотрудника по табельному (часть email до @) во всех источниках
+
 function resolveAuthByTab(tab){
-  const t=String(tab||'');
-  const all=[].concat(getAuthRoster(), AUTH_EMPLOYEES, Array.isArray(PUBLIC_ROSTER)?PUBLIC_ROSTER:[]);
-  return all.find(e=>e && String(e.tab||'')===t) || null;
+  const t = String(tab||'').trim();
+  if(!t) return null;
+  const all = [].concat(
+    getAuthRoster(),
+    Array.isArray(APP.employees) ? APP.employees : [],
+    Array.isArray(PUBLIC_ROSTER) ? PUBLIC_ROSTER : [],
+    (typeof BRIGADE_ROSTER !== 'undefined' && Array.isArray(BRIGADE_ROSTER)) ? BRIGADE_ROSTER : [],
+    (typeof AUTH_EMPLOYEES !== 'undefined' && Array.isArray(AUTH_EMPLOYEES)) ? AUTH_EMPLOYEES : []
+  );
+  return all.find(e => {
+    if(!e) return false;
+    if(e.tab && String(e.tab).trim() === t) return true;
+    if(typeof getEmpAuthEmail === 'function'){
+      const em = getEmpAuthEmail(e, e.name).split('@')[0];
+      if(em === t) return true;
+    }
+    return false;
+  }) || null;
 }
+
 function fillAuthSelects(){
   const fired = e => ((e && e.status!=null ? e.status : '').toString().trim().toLowerCase()==='уволен');
   const list = getAuthRoster().filter(e=>e && e.name && !fired(e))
@@ -5287,8 +5373,16 @@ function fillAuthSelects(){
   const opts = list.map(e=>`<option value="${e.name}">${e.name} — ${e.pos||''}</option>`).join('');
   const ln = document.getElementById('login-name');
   const rn = document.getElementById('reg-name');
-  if(ln) ln.innerHTML='<option value="">— Выберите из списка —</option>'+opts;
-  if(rn) rn.innerHTML='<option value="">— Выберите из списка —</option>'+opts;
+  if(ln){
+    const cur = ln.value;
+    ln.innerHTML='<option value="">— Выберите из списка —</option>'+opts;
+    if(cur) ln.value = cur;
+  }
+  if(rn){
+    const cur = rn.value;
+    rn.innerHTML='<option value="">— Выберите из списка —</option>'+opts;
+    if(cur) rn.value = cur;
+  }
 }
 
 function initApp(){
