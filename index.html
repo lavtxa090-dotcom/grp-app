@@ -1124,29 +1124,22 @@ const APP={
   role:'master', period:'2026-05',
   currentUser:null, _dataLoaded:false, motoEntries:{},
   employees:[
-    {name:'Бакро Александр Вячеславович',tab:'00771',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Бахирев Николай Викторович',tab:'00057',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Биктимиров Руслан Расимович',tab:'01126',pos:'Мастер по нефтеотдаче',role:'master',status:'Активен'},
     {name:'Булычев Денис Николаевич',tab:'00261',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Гариев Ильнур Радикович',tab:'01224',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
+    {name:'Гергерт Николай Николаевич',tab:'01723',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Данилов Андрей Иванович',tab:'01373',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Зверев Александр Леонидович',tab:'00946',pos:'Машинист парового агрегата',role:'worker',status:'Активен'},
+    {name:'Зверев Александр Леонидович',tab:'00946',pos:'Машинист ППДУ',role:'worker',status:'Активен'},
     {name:'Иванов Павел Вадимович',tab:'01253',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Кондратенко Виктор Александрович',tab:'00521',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Краснояров Евгений Геннадьевич',tab:'00576',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Липатников Денис Александрович',tab:'00799',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
+    {name:'Полянский Александр Алексеевич',tab:'10',pos:'Машинист ППДУ',role:'worker',status:'Активен'},
     {name:'Потлов Сергей Анатолиевич',tab:'01149',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Попов Александр Геннадьевич',tab:'01163',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
+    {name:'Саликов Ришат Шабикович',tab:'01726',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Сапрыкин Иван Владимирович',tab:'00090',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Сокол Николай Владимирович',tab:'01146',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Стипурин Григорий Васильевич',tab:'01428',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Сухоносов Виталий Алексеевич',tab:'00823',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Траньков Алексей Олегович',tab:'01374',pos:'Мастер бригады',role:'master',status:'Активен'},
-    {name:'Шагаев Данияр Геннадьевич',tab:'01372',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Яловец Николай Вадимович',tab:'0991',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
+    {name:'Шагаев Данияр Геннадьевич',tab:'01372',pos:'Оператор по ГРП',role:'worker',status:'Активен'}
   ],
   docs:[],equipment:[],fuelLog:[],calcHistory:[],training:[
     {person:'Булычев Денис Николаевич',type:'Медицинский осмотр',date:'2025-05-23',years:1},
@@ -2035,9 +2028,6 @@ const APP={
   }
 ],
 };
-
-// Preserve original base catalog of trainings for auto-recovery
-const INITIAL_TRAININGS = Array.isArray(APP.training) ? JSON.parse(JSON.stringify(APP.training)) : [];
 
 function fmt(d){if(!d)return'—';return new Date(d).toLocaleDateString('ru-RU')}
 function fmtH(h){const hh=Math.floor(h);const mm=Math.round((h-hh)*60);return`${hh}ч ${mm}мин`}
@@ -3680,34 +3670,6 @@ function loadAllData(){
             }
             fillAuthSelects();
           }
-          if(col === 'training'){
-            if(Array.isArray(APP.training) && typeof INITIAL_TRAININGS !== 'undefined' && INITIAL_TRAININGS.length){
-              let healed = 0;
-              APP.training.forEach(t=>{
-                if(!t.date){
-                  const match = INITIAL_TRAININGS.find(it=>it.person===t.person && it.type===t.type && it.date);
-                  if(match){
-                    t.date = match.date;
-                    if(match.years) t.years = match.years;
-                    healed++;
-                  }
-                }
-              });
-              const existingSet = new Set(APP.training.map(t=>t.person+':::'+t.type));
-              const activeEmpNames = new Set((APP.employees||[]).map(e=>e.name));
-              INITIAL_TRAININGS.forEach(it=>{
-                if(it.date && activeEmpNames.has(it.person) && !existingSet.has(it.person+':::'+it.type)){
-                  APP.training.push({...it});
-                  existingSet.add(it.person+':::'+it.type);
-                  healed++;
-                }
-              });
-              if(healed > 0 && APP.role === 'master' && db && auth && auth.currentUser){
-                saveToFirebase('training', APP.training);
-                console.log('Restored ' + healed + ' training dates from base catalog');
-              }
-            }
-          }
         }
         // If data is null - user deleted everything, keep APP empty, don't restore
         if(data === null){
@@ -5330,17 +5292,21 @@ function loadPublicRoster(){
 }
 
 function getAuthRoster(){
-  if(Array.isArray(APP.employees) && APP.employees.length > 0){
-    return APP.employees;
-  }
+  // 1. Приоритет №1: публичный справочник из Firebase (актуальный состав бригады)
   if(Array.isArray(PUBLIC_ROSTER) && PUBLIC_ROSTER.length > 0){
     return PUBLIC_ROSTER;
   }
+  // 2. Если пользователь уже авторизован — берем загруженных сотрудников
+  if(auth && auth.currentUser && Array.isArray(APP.employees) && APP.employees.length > 0){
+    return APP.employees;
+  }
+  // 3. Локальный кэш
   try{
     const cached = JSON.parse(localStorage.getItem('grp_roster')||'[]');
     if(Array.isArray(cached) && cached.length > 0) return cached;
   }catch(_){}
-  return (typeof BRIGADE_ROSTER!=='undefined' && BRIGADE_ROSTER.length) ? BRIGADE_ROSTER : (typeof AUTH_EMPLOYEES!=='undefined'?AUTH_EMPLOYEES:[]);
+  // 4. Запасной список из APP.employees
+  return Array.isArray(APP.employees) ? APP.employees : [];
 }
 
 function resolveAuthEmp(name){
@@ -5348,20 +5314,12 @@ function resolveAuthEmp(name){
   const list = getAuthRoster();
   let found = list.find(e => e && e.name === name);
   if(found) return found;
-  if(Array.isArray(APP.employees)){
-    found = APP.employees.find(e => e && e.name === name);
-    if(found) return found;
-  }
   if(Array.isArray(PUBLIC_ROSTER)){
     found = PUBLIC_ROSTER.find(e => e && e.name === name);
     if(found) return found;
   }
-  if(typeof BRIGADE_ROSTER !== 'undefined' && Array.isArray(BRIGADE_ROSTER)){
-    found = BRIGADE_ROSTER.find(e => e && e.name === name);
-    if(found) return found;
-  }
-  if(typeof AUTH_EMPLOYEES !== 'undefined' && Array.isArray(AUTH_EMPLOYEES)){
-    found = AUTH_EMPLOYEES.find(e => e && e.name === name);
+  if(Array.isArray(APP.employees)){
+    found = APP.employees.find(e => e && e.name === name);
     if(found) return found;
   }
   return null;
@@ -5371,11 +5329,8 @@ function resolveAuthByTab(tab){
   const t = String(tab||'').trim();
   if(!t) return null;
   const all = [].concat(
-    getAuthRoster(),
-    Array.isArray(APP.employees) ? APP.employees : [],
     Array.isArray(PUBLIC_ROSTER) ? PUBLIC_ROSTER : [],
-    (typeof BRIGADE_ROSTER !== 'undefined' && Array.isArray(BRIGADE_ROSTER)) ? BRIGADE_ROSTER : [],
-    (typeof AUTH_EMPLOYEES !== 'undefined' && Array.isArray(AUTH_EMPLOYEES)) ? AUTH_EMPLOYEES : []
+    Array.isArray(APP.employees) ? APP.employees : []
   );
   return all.find(e => {
     if(!e) return false;
