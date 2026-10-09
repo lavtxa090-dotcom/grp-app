@@ -2036,6 +2036,9 @@ const APP={
 ],
 };
 
+// Preserve original base catalog of trainings for auto-recovery
+const INITIAL_TRAININGS = Array.isArray(APP.training) ? JSON.parse(JSON.stringify(APP.training)) : [];
+
 function fmt(d){if(!d)return'—';return new Date(d).toLocaleDateString('ru-RU')}
 function fmtH(h){const hh=Math.floor(h);const mm=Math.round((h-hh)*60);return`${hh}ч ${mm}мин`}
 
@@ -2190,13 +2193,9 @@ function syncBrigadeRoster(){
   }
 }
 
-// Тихая автосинхронизация при загрузке (без confirm)
+// Автосинхронизация отключена: удалённые сотрудники не должны возвращаться сами
 function maybePromptRosterSync(){
-  if(APP.role!=='master') return;
-  const cur=(APP.employees||[]).map(e=>e.name);
-  const official=BRIGADE_ROSTER.map(e=>e.name);
-  const mismatch = official.some(n=>!cur.includes(n)); // проверяем только недостающих
-  if(mismatch) syncBrigadeRoster();
+  return;
 }
 
 // DOCS
@@ -2876,9 +2875,10 @@ function forceSeedData(){
 }
 
 function trainStatus(t){
-  if(!t||!t.date) return {status:'unknown',label:'—',color:'gray'};
+  if(!t||!t.date) return {status:'empty',label:'—',color:'gray',days:null};
   if(t.type && /Корь/i.test(t.type)) return {status:'ok', label:'Бессрочно', color:'green', days:9999};
   const exp = new Date(t.date);
+  if(isNaN(exp.getTime())) return {status:'empty',label:'—',color:'gray',days:null};
   if(t.years && t.years < 99) exp.setFullYear(exp.getFullYear() + t.years);
   const now = new Date();
   const diff = Math.round((exp - now) / (1000*60*60*24));
@@ -2901,21 +2901,26 @@ function renderTrainList(){
   list=list.slice(0,fp ? 500 : 150);
   document.getElementById('train-list-body').innerHTML=list.map(t=>{
     const st=trainStatus(t);const ri=APP.training.indexOf(t);
-    const cls=st.status==='exp'?'badge-red':st.status==='soon'?'badge-yellow':'badge-green';
+    const cls=st.status==='exp'?'badge-red':st.status==='soon'?'badge-yellow':st.status==='ok'?'badge-green':'badge-gray';
     const tDelBtn = APP.role==='master' ? `<button class="btn-icon btn-sm" style="color:var(--red)" onclick="delTraining(${ri})" title="Удалить">✕</button>` : '';
-    return`<tr><td>${t.person}</td><td>${t.type}</td><td class="mono" style="font-size:12px">${fmt(t.date)}</td><td><span class="badge ${cls}">${st.label}</span></td><td class="mono" style="color:${st.status==='exp'?'var(--red)':st.status==='soon'?'var(--accent)':'var(--text3)'}">${st.days<0?Math.abs(st.days)+'д назад':st.days+'д'}</td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openTrainEdit(${ri})" title="Редактировать">✎</button>${tDelBtn}</td></tr>`;
+    const daysStr = st.days!=null ? (st.days<0 ? Math.abs(st.days)+'д назад' : st.days+'д') : '—';
+    return`<tr><td>${t.person}</td><td>${t.type}</td><td class="mono" style="font-size:12px">${fmt(t.date)}</td><td><span class="badge ${cls}">${st.label}</span></td><td class="mono" style="color:${st.status==='exp'?'var(--red)':st.status==='soon'?'var(--accent)':'var(--text3)'}">${daysStr}</td><td style="display:flex;gap:4px"><button class="btn-icon btn-sm" onclick="openTrainEdit(${ri})" title="Редактировать">✎</button>${tDelBtn}</td></tr>`;
   }).join('');
 }
+
 function renderMatrix(){
   const types=[...new Set(APP.training.map(t=>t.type))];
   document.getElementById('matrix-table').innerHTML=`
     <thead><tr><th class="name-col">Сотрудник</th>${types.map(t=>`<th title="${t}">${t.substring(0,7)}</th>`).join('')}</tr></thead>
     <tbody>${APP.employees.map(emp=>`<tr><td class="name-col">${emp.name}</td>${types.map(type=>{
       const rec=APP.training.find(t=>t.person===emp.name&&t.type===type);
-      if(!rec)return`<td class="cell-empty">—</td>`;
-      const st=trainStatus(rec);const ri=APP.training.indexOf(rec);
-      const cls=st.status==='exp'?'cell-exp':st.status==='soon'?'cell-soon':'cell-ok';
-      return`<td class="${cls}" onclick="openTrainEdit(${ri})" title="${fmt(rec.date)}">${st.days<0?st.days+'д':'+'+st.days+'д'}</td>`;
+      if(!rec) return`<td class="cell-empty">—</td>`;
+      const ri=APP.training.indexOf(rec);
+      if(!rec.date) return`<td class="cell-empty" onclick="openTrainEdit(${ri})" title="Нет даты">—</td>`;
+      const st=trainStatus(rec);
+      const cls=st.status==='exp'?'cell-exp':st.status==='soon'?'cell-soon':st.status==='ok'?'cell-ok':'cell-empty';
+      const txt = (st.days!=null && st.days!==9999) ? (st.days<0 ? st.days+'д' : '+'+st.days+'д') : (st.label||'—');
+      return`<td class="${cls}" onclick="openTrainEdit(${ri})" title="${fmt(rec.date)}">${txt}</td>`;
     }).join('')}</tr>`).join('')}</tbody>`;
 }
 function openTrainEdit(idx){const t=APP.training[idx];document.getElementById('et-idx').value=idx;document.getElementById('et-person').value=t.person;document.getElementById('et-type').value=t.type;document.getElementById('et-date').value=t.date;openModal('modal-edit-training')}
@@ -3675,6 +3680,34 @@ function loadAllData(){
             }
             fillAuthSelects();
           }
+          if(col === 'training'){
+            if(Array.isArray(APP.training) && typeof INITIAL_TRAININGS !== 'undefined' && INITIAL_TRAININGS.length){
+              let healed = 0;
+              APP.training.forEach(t=>{
+                if(!t.date){
+                  const match = INITIAL_TRAININGS.find(it=>it.person===t.person && it.type===t.type && it.date);
+                  if(match){
+                    t.date = match.date;
+                    if(match.years) t.years = match.years;
+                    healed++;
+                  }
+                }
+              });
+              const existingSet = new Set(APP.training.map(t=>t.person+':::'+t.type));
+              const activeEmpNames = new Set((APP.employees||[]).map(e=>e.name));
+              INITIAL_TRAININGS.forEach(it=>{
+                if(it.date && activeEmpNames.has(it.person) && !existingSet.has(it.person+':::'+it.type)){
+                  APP.training.push({...it});
+                  existingSet.add(it.person+':::'+it.type);
+                  healed++;
+                }
+              });
+              if(healed > 0 && APP.role === 'master' && db && auth && auth.currentUser){
+                saveToFirebase('training', APP.training);
+                console.log('Restored ' + healed + ' training dates from base catalog');
+              }
+            }
+          }
         }
         // If data is null - user deleted everything, keep APP empty, don't restore
         if(data === null){
@@ -3764,11 +3797,6 @@ function loadAllData(){
 
 function refreshCurrentPage(changedCol){
   if(changedCol==='employees' && APP.role==='master' && !window._namesFixRun){ window._namesFixRun=true; setTimeout(()=>{ try{ fixEmployeeNames(true); }catch(e){} }, 500); }
-  // Одноразовая проверка состава: если в базе ещё старый набор — предложить обновить
-  if(changedCol==='employees' && APP.role==='master' && !window._rosterCheckRun){
-    window._rosterCheckRun=true;
-    setTimeout(()=>{ try{ maybePromptRosterSync(); }catch(e){} }, 900);
-  }
   const pageMap = {
     employees: ['employees','dashboard','worker-home'],
     docs: ['docs'],
@@ -3849,15 +3877,6 @@ saveEditEmployee = function(){
   _origSaveEditEmployee();
   saveToFirebase('employees', APP.employees);
   if(typeof syncPublicRoster === 'function') syncPublicRoster();
-};
-const _origDelEmployee = delEmployee;
-delEmployee = function(i){
-  if(confirm('Удалить сотрудника: '+APP.employees[i].name+'?')){
-    APP.employees.splice(i,1);
-    renderEmployees();
-    saveToFirebase('employees', APP.employees);
-    if(typeof syncPublicRoster === 'function') syncPublicRoster();
-  }
 };
 const _origAddFuel = addFuel;
 addFuel = function(){
@@ -4970,24 +4989,27 @@ function saveEditEmployee(){
   closeModal('modal-edit-emp');
   renderEmployees();
   saveToFirebase('employees', APP.employees);
+  if(typeof syncPublicRoster === 'function') syncPublicRoster();
   fillAuthSelects(); // update login/register list
 }
 function delEmployee(i){
-  const name = APP.employees[i].name;
+  const name = APP.employees[i]?.name;
+  if(!name) return;
   if(confirm('Удалить сотрудника ' + name + ' и все его данные?')){
     // Remove from employees
     APP.employees.splice(i,1);
     // Remove from training
-    APP.training = APP.training.filter(t=>t.person!==name);
+    APP.training = (APP.training||[]).filter(t=>t.person!==name);
     // Remove from vacations
-    APP.vacations = APP.vacations.filter(v=>v.person!==name);
+    APP.vacations = (APP.vacations||[]).filter(v=>v.person!==name);
     // Remove from sickLeaves
-    APP.sickLeaves = APP.sickLeaves.filter(s=>s.name!==name);
+    APP.sickLeaves = (APP.sickLeaves||[]).filter(s=>s.name!==name);
     // Save all affected collections
     saveToFirebase('employees', APP.employees);
     saveToFirebase('training', APP.training);
     saveToFirebase('vacations', APP.vacations);
     saveToFirebase('sickLeaves', APP.sickLeaves);
+    if(typeof syncPublicRoster === 'function') syncPublicRoster();
     renderEmployees();
     fillAuthSelects();
   }
