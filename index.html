@@ -551,19 +551,20 @@ body{color-scheme:light}
       <div class="tab" onclick="trainTab('add')">+ Добавить</div>
     </div>
     <div id="train-tab-list">
-      <div style="display:flex;gap:10px;margin-bottom:16px">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
         <select class="form-select" style="width:auto" id="train-fp" onchange="renderTrainList()"><option value="">Все сотрудники</option></select>
         <select class="form-select" style="width:auto" id="train-fs" onchange="renderTrainList()">
           <option value="">Все статусы</option><option value="ok">Действующие</option><option value="soon">Скоро истекает</option><option value="exp">Истекло</option>
         </select>
-        <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="ensureBaseTrainings()" title="Добавить недостающие базовые обучения всем сотрудникам (без дат)">➕ Базовые обучения всем</button>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="restoreTrainingFromMatrix(true)" title="Заполнить даты обучений всех сотрудников по официальной матрице флота">⟳ Проставить по матрице флота</button>
+        <button class="btn btn-secondary btn-sm" onclick="ensureBaseTrainings()" title="Добавить недостающие базовые обучения всем сотрудникам (без дат)">➕ Базовые обучения всем</button>
       </div>
       <div class="section"><div class="section-body">
         <table class="data-table"><thead><tr><th>Сотрудник</th><th>Обучение</th><th>Дата</th><th>Статус</th><th>Дней</th><th></th></tr></thead><tbody id="train-list-body"></tbody></table>
       </div></div>
     </div>
     <div id="train-tab-matrix" style="display:none">
-      <div class="section"><div class="section-header"><div class="section-title">Матрица обученности флота</div></div>
+      <div class="section"><div class="section-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"><div class="section-title">Матрица обученности флота</div><button class="btn btn-primary btn-sm" onclick="restoreTrainingFromMatrix(true)" title="Заполнить даты обучений всех сотрудников по официальной матрице флота">⟳ Проставить по матрице флота</button></div>
         <div class="section-body matrix-wrap"><table class="matrix-table" id="matrix-table"></table></div>
       </div>
     </div>
@@ -2026,8 +2027,11 @@ const APP={
     "actual": "",
     "note": ""
   }
-],
+  ]
 };
+
+// Эталонная матрица обучений флота (369 записей с реальными датами)
+const MASTER_TRAININGS = JSON.parse(JSON.stringify(APP.training));
 
 function fmt(d){if(!d)return'—';return new Date(d).toLocaleDateString('ru-RU')}
 function fmtH(h){const hh=Math.floor(h);const mm=Math.round((h-hh)*60);return`${hh}ч ${mm}мин`}
@@ -3044,6 +3048,65 @@ const BASE_TRAININGS = [
   {type:'Корь прививка №2', years:99},
 ];
 
+function matchTrainRecord(a, b){
+  if(!a || !b) return false;
+  if(a.person !== b.person) return false;
+  const na = (a.type||'').toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
+  const nb = (b.type||'').toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
+  if(na !== nb) return false;
+  if((a.years >= 99) !== (b.years >= 99)) return false;
+  return true;
+}
+
+function restoreTrainingFromMatrix(notify){
+  if(typeof MASTER_TRAININGS === 'undefined' || !MASTER_TRAININGS.length) return;
+  if(!Array.isArray(APP.training)) APP.training = [];
+  
+  let restored = 0;
+  // 1. Восстановить/проставить все записи из эталонной матрицы флота (369 записей)
+  MASTER_TRAININGS.forEach(mt => {
+    const existing = APP.training.find(t => matchTrainRecord(t, mt));
+    if(existing){
+      if(!existing.date && mt.date){
+        existing.date = mt.date;
+        if(mt.years) existing.years = mt.years;
+        restored++;
+      }
+    } else {
+      APP.training.push({person: mt.person, type: mt.type, date: mt.date || '', years: mt.years || 1});
+      restored++;
+    }
+  });
+
+  // 2. Для действующих сотрудников бригады добавить недостающие слоты BASE_TRAININGS
+  if(Array.isArray(APP.employees) && typeof BASE_TRAININGS !== 'undefined' && Array.isArray(BASE_TRAININGS)){
+    const activeEmps = APP.employees.filter(e => e.status !== 'Уволен');
+    activeEmps.forEach(emp => {
+      BASE_TRAININGS.forEach(bt => {
+        const found = APP.training.find(t => matchTrainRecord(t, {person: emp.name, type: bt.type, years: bt.years}));
+        if(!found){
+          APP.training.push({person: emp.name, type: bt.type, date: '', years: bt.years || 1});
+        }
+      });
+    });
+  }
+
+  // 3. Синхронизируем в Firebase, чтобы данные закрепились в базе
+  if(db && auth && auth.currentUser){
+    db.ref('training').set(APP.training).catch(e => console.warn('Sync training to FB error:', e));
+  }
+  
+  try{ renderTrainList(); }catch(e){}
+  try{ if(typeof renderMatrix === 'function') renderMatrix(); }catch(e){}
+  try{ renderEmployees(); }catch(e){}
+  try{ renderDashboard(); }catch(e){}
+  try{ if(typeof renderMyTraining === 'function') renderMyTraining(); }catch(e){}
+  
+  if(notify && typeof showToast === 'function'){
+    showToast('✅ Обучения успешно проставлены по матрице флота!', 'green');
+  }
+}
+
 function ensureBaseTrainings(){
   if(APP.role!=='master'){ showToast('Только для мастера','red'); return; }
   const norm = x => (x||'').toString().toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
@@ -3670,6 +3733,22 @@ function loadAllData(){
             }
             fillAuthSelects();
           }
+          if(col === 'training'){
+            let needsRestore = false;
+            if(!Array.isArray(APP.training) || APP.training.length < 200){
+              needsRestore = true;
+            } else if(typeof MASTER_TRAININGS !== 'undefined' && MASTER_TRAININGS.length){
+              const activeNames = new Set((APP.employees||[]).map(e=>e.name));
+              const hasMissing = MASTER_TRAININGS.filter(mt => activeNames.has(mt.person) && mt.date).some(mt => {
+                const cur = APP.training.find(t => matchTrainRecord(t, mt));
+                return !cur || !cur.date;
+              });
+              if(hasMissing) needsRestore = true;
+            }
+            if(needsRestore){
+              restoreTrainingFromMatrix(false);
+            }
+          }
         }
         // If data is null - user deleted everything, keep APP empty, don't restore
         if(data === null){
@@ -3681,26 +3760,12 @@ function loadAllData(){
               APP.vacations = APP.vacations.filter(v=>activeNames.has(v.person));
               APP.training = APP.training.filter(t=>activeNames.has(t.person));
             }
-            // Filter vacations and training to only active employees
-            if(APP.employees && APP.employees.length > 0){
-              const _active = new Set(APP.employees.map(e=>e.name));
-              APP.vacations = APP.vacations.filter(v=>_active.has(v.person));
-              APP.training = APP.training.filter(t=>_active.has(t.person));
-            }
           } else if(col === 'vacations'){
             // Keep APP.vacations filtered to current employees
             const activeEmpNames = new Set(APP.employees.map(e=>e.name));
             APP.vacations = APP.vacations.filter(v=>activeEmpNames.has(v.person));
           } else if(col === 'training'){
-            // Keep APP.training (code defaults with 369 records)
-            // Auto-seed to Firebase if master
-            if(APP.role === 'master' && APP.training && APP.training.length > 0 && db && auth && auth.currentUser){
-              setTimeout(()=>{
-                db.ref('training').set(APP.training).catch(e=>console.warn('seed training:', e));
-                db.ref('vacations').set(APP.vacations).catch(e=>console.warn('seed vacations:', e));
-                db.ref('_initialized').set(true).catch(e=>console.warn('seed init:', e));
-              }, 1000);
-            }
+            restoreTrainingFromMatrix(false);
           } else {
             APP[col] = [];
           }
