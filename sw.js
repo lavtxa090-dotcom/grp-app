@@ -1,4 +1,4 @@
-const CACHE_NAME = 'grp-brigade-v18';
+const CACHE_NAME = 'grp-brigade-v20';
 const urlsToCache = [
   '/grp-app/',
   '/grp-app/index.html',
