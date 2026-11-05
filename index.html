@@ -1444,7 +1444,16 @@ const APP={
     {person:'Шагаев Данияр Геннадьевич',type:'Электробезопасность',date:'2026-05-15',years:1},
     {person:'Шагаев Данияр Геннадьевич',type:'Пропуск  ГПН-Заполярье',date:'2025-12-31',years:1},
     {person:'Шагаев Данияр Геннадьевич',type:'ПДД',date:'2026-05-15',years:1},
-    {person:'Шагаев Данияр Геннадьевич',type:'Противопожарный инструктаж',date:'2026-07-16',years:1}
+    {person:'Шагаев Данияр Геннадьевич',type:'Противопожарный инструктаж',date:'2026-07-16',years:1},
+    {person:'Полянский Александр Алексеевич',type:'ГНВП',date:'2026-04-30',years:2},
+    {person:'Полянский Александр Алексеевич',type:'Высота  1,2 группа',date:'2026-05-08',years:3},
+    {person:'Полянский Александр Алексеевич',type:'Охрана труда  программа Б (Безопасные методы и при',date:'2026-04-20',years:3},
+    {person:'Полянский Александр Алексеевич',type:'Охрана труда  программа В ( Безопасные методы и пр',date:'2026-04-24',years:1},
+    {person:'Полянский Александр Алексеевич',type:'СИЗ',date:'2026-04-20',years:3},
+    {person:'Полянский Александр Алексеевич',type:'Оказание первой доврачебной помощи',date:'2026-04-20',years:3},
+    {person:'Полянский Александр Алексеевич',type:'Сосуды под давлением',date:'2029-02-07',years:1},
+    {person:'Полянский Александр Алексеевич',type:'Защитное вождение',date:'2024-11-14',years:1},
+    {person:'Полянский Александр Алексеевич',type:'Корь прививка №1',date:'1983-07-08',years:99}
   ],
   sickLeaves:[],motoData:[],motoByDate:{},motoDate:'',period:'',
   vacations:[
@@ -3000,7 +3009,7 @@ function restoreTrainingFromMatrix(notify){
   MASTER_TRAININGS.forEach(mt => {
     const existing = APP.training.find(t => matchTrainRecord(t, mt));
     if(existing){
-      if(existing.date !== mt.date){
+      if(notify && existing.date !== mt.date){
         existing.date = mt.date;
         if(mt.years) existing.years = mt.years;
         restored++;
@@ -3672,10 +3681,7 @@ function loadAllData(){
               needsRestore = true;
             } else if(typeof MASTER_TRAININGS !== 'undefined' && MASTER_TRAININGS.length){
               const activeNames = new Set((APP.employees||[]).map(e=>e.name));
-              const hasMissing = MASTER_TRAININGS.filter(mt => activeNames.has(mt.person) && mt.date).some(mt => {
-                const cur = APP.training.find(t => matchTrainRecord(t, mt));
-                return !cur || cur.date !== mt.date;
-              });
+              const hasMissing = MASTER_TRAININGS.filter(mt => activeNames.has(mt.person) && mt.date).some(mt => !APP.training.find(t => matchTrainRecord(t, mt)));
               if(hasMissing) needsRestore = true;
             }
             if(needsRestore){
