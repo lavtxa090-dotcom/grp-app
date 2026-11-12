@@ -2810,15 +2810,34 @@ function forceSeedData(){
   });
 }
 
+function isOtV(type){ return /^охрана труда\s+программа в/i.test((type||'').replace(/ё/g,'е').replace(/\s+/g,' ').trim()); }
+// Срок действия обучения. ОТ программа В: с 01.09.2026 (Постановление №2464) — 1 раз в 3 года;
+// действующие на 01.09.2026 удостоверения продлеваются до 3 лет с даты выдачи.
+function trainExpiry(t){
+  if(!t||!t.date) return null;
+  const sosud=/^сосуды под давлением/i.test((t.type||'').replace(/\s+/g,' ').trim());
+  if(t.years>=99 && !sosud) return null;
+  const d=new Date(t.date); if(isNaN(d.getTime())) return null;
+  let y=sosud&&t.years>=99?5:(t.years||1); // второй вид «Сосуды» — 1 раз в 5 лет, как в образце
+  if(isOtV(t.type)){
+    const cut=new Date('2026-09-01');
+    const old=new Date(d); old.setFullYear(old.getFullYear()+1);
+    y=(d>=cut||old>=cut)?3:1;
+  }
+  const e=new Date(d); e.setFullYear(e.getFullYear()+y);
+  return e;
+}
 function trainStatus(t){
   if(!t||!t.date) return {status:'empty',label:'—',color:'gray',days:null};
   if(t.type && /Корь/i.test(t.type)) return {status:'ok', label:'Бессрочно', color:'green', days:9999};
+  // как в образце матрицы: психиатрическое освидетельствование — бессрочно
+  if(t.type && /^психиатрическ/i.test(t.type.trim())) return {status:'ok', label:'Бессрочно', color:'green', days:9999};
   const exp = new Date(t.date);
   if(isNaN(exp.getTime())) return {status:'empty',label:'—',color:'gray',days:null};
-  if(t.years && t.years < 99) exp.setFullYear(exp.getFullYear() + t.years);
+  { const ee=trainExpiry(t); if(ee) exp.setTime(ee.getTime()); }
   const now = new Date();
   const diff = Math.round((exp - now) / (1000*60*60*24));
-  if(t.years >= 99) return {status:'ok', label:'Бессрочно', color:'green', days:9999};
+  if(t.years >= 99 && !/^сосуды/i.test((t.type||'').trim())) return {status:'ok', label:'Бессрочно', color:'green', days:9999};
   if(diff < 0) return {status:'exp', label:'ИСТЕКЛО', color:'red', days:diff};
   if(diff < 90) return {status:'soon', label:'СКОРО '+diff+'д', color:'orange', days:diff};
   return {status:'ok', label:'ОК', color:'green', days:diff};
@@ -2896,40 +2915,37 @@ function saveEquip(){APP.equipment.push({name:document.getElementById('neq-name'
 
 // ============ ЭКСПОРТ МАТРИЦЫ ОБУЧЕНИЙ (формат флота) ============
 const MATRIX_COLS = [
-  {head:'Медицинский осмотр', match:'Медицинский осмотр', period:'1 раз в год', years:1},
-  {head:'Психиатрическое \nосвидетельствование', match:'Психиатрическое освидетельствование', period:'1 раз в 5 лет', years:5},
-  {head:'Противопожарный инструктаж', match:'Противопожарный инструктаж', period:'1 раз в 6 месяцев', years:0.5},
-  {head:'Основная профессия', match:'Основная профессия', period:'1 раз в год', years:1},
-  {head:'ПСЖ', match:'ПСЖ', period:'1 раз в год', years:1},
-  {head:'20 часовая  программа', match:'20 часовая программа', period:'1 раз в год', years:1},
-  {head:'Охрана труда', match:'Охрана труда', period:'1 раз в год', years:1},
-  {head:'Смежная профессия стропальщика', match:'Смежная профессия стропальщика', period:'1 раз в год', years:1},
-  {head:'Смежная профессия водитель автомобиля', match:'Смежная профессия водитель автомобиля', period:'1 раз в год', years:1},
-  {head:'Электробезопасность', match:'Электробезопасность', period:'1 раз в год', years:1},
-  {head:'ПДД', match:'ПДД', period:'1 раз в год', years:1},
-  {head:'Сосуды под давлением', match:'Сосуды под давлением', period:'1 раз в год', years:1, indef:false},
-  {head:'Высота', match:'Высота', period:'1 раз в год', years:1},
-  {head:'ПромБ', match:'ПромБ', period:'1 раз в 5 лет', years:5},
-  {head:'Оказание первой доврачебной помощи', match:'Оказание первой доврачебной помощи', period:'1 раз в 3 года', years:3},
-  {head:'Сосуды под давлением', match:'Сосуды под давлением', period:'бессрочно', years:99, indef:true},
-  {head:'ГНВП', match:'ГНВП', period:'1 раз в 2 года', years:2},
-  {head:'Высота \n1,2 группа', match:'Высота 1,2 группа', period:'1 раз в 3 года', years:3},
-  {head:'Охрана труда \nпрограмма А', match:'Охрана труда программа А', period:'1 раз в 3 года', years:3},
-  {head:'Охрана труда \nпрограмма Б (Безопасные методы и приемы выполнения работ при воздействии вредных и (или) опасных проиводственных факторов, источников опасности, идентифицированнх в рамках СОУТ и оценки профессиональных рисков)', match:'Охрана труда программа Б', period:'1 раз в 3 года', years:3},
-  {head:'Охрана труда \nпрограмма В ( Безопасные методы и приемы выполнения работ повышенной опасности, к которым предъявляются дополнительные требования в соответствии с НПА, содержащими государственные нормативные требования охраны труда.', match:'Охрана труда программа В', period:'1 раз в год', years:1},
-  {head:'СИЗ', match:'СИЗ', period:'1 раз в 3 года', years:3},
-  {head:'Высота \n3 группа\nИТР', match:'Высота 3 группа ИТР', period:'1 раз в 5 лет', years:5},
-  {head:'ПТМ ИТР \n(инструктирующие)', match:'ПТМ ИТР (инструктирующие)', period:'1 год', years:1},
-  {head:'Обращение с отходами', match:'Обращение с отходами', period:'1 раз в 5 лет', years:5},
-  {head:'ГВС', match:'ГВС', period:'1 раз в 5 лет', years:5},
-  {head:'Обращение с \nкислотой', match:'Обращение с кислотой', period:'1 раз в 5 лет', years:5},
-  {head:'Защитное вождение', match:'Защитное вождение', period:'1 раз в год', years:1},
-  {head:'Пропуск \nГПН-Заполярье', match:'Пропуск ГПН-Заполярье', period:'', years:1},
-  {head:'Пропуск \nГПН-Песцовое', match:'Пропуск ГПН-Песцовое', period:'', years:1},
-  {head:'Корь прививка №1', match:'Корь прививка №1', period:'бессрочно', years:99},
-  {head:'Корь прививка №2', match:'Корь прививка №2', period:'бессрочно', years:99},
-  {head:'УМО', match:'УМО', period:'1 раз в 2 года', years:2},
-  {head:'ВОЗ', match:'ВОЗ', period:'1 раз в год', years:1},
+  {head:"Медицинский осмотр", match:"Медицинский осмотр", period:"1 раз в год", years:1},
+  {head:"УМО", match:"УМО", period:"1 раз в год", years:1},
+  {head:"Психиатрическое \nосвидетельствование", match:"Психиатрическое освидетельствование", period:"бессрочно", years:5, indef:true},
+  {head:"Противопожарный инструктаж", match:"Противопожарный инструктаж", period:"1 раз в 6 месяцев", years:0.5},
+  {head:"ПСЖ", match:"ПСЖ", period:"1 раз в год", years:1},
+  {head:"Электробезопасность", match:"Электробезопасность", period:"1 раз в год", years:1},
+  {head:"ПДД", match:"ПДД", period:"1 раз в год", years:1},
+  {head:"Сосуды под давлением", match:"Сосуды под давлением", period:"1 раз в год", years:1},
+  {head:"Высота", match:"Высота", period:"1 раз в год", years:1},
+  {head:"ПромБ", match:"ПромБ", period:"1 раз в 5 лет", years:5},
+  {head:"Оказание первой доврачебной помощи", match:"Оказание первой доврачебной помощи", period:"1 раз в 3 года", years:3},
+  {head:"Сосуды под давлением", match:"Сосуды под давлением", period:"1 раз в 5 лет", years:5, indef:true},
+  {head:"ГНВП", match:"ГНВП", period:"1 раз в 2 года", years:2},
+  {head:"Высота \n1,2 группа", match:"Высота 1,2 группа", period:"1 раз в 3 года", years:3},
+  {head:"Высота \n3 группа", match:"Высота 3 группа", period:"1 раз в 5 лет", years:5, alias:['высота 3 группа итр']},
+  {head:"Охрана труда \nпрограмма А", match:"Охрана труда программа А", period:"1 раз в 3 года", years:3},
+  {head:"Охрана труда \nпрограмма Б", match:"Охрана труда программа Б", period:"1 раз в 3 года", years:3},
+  {head:"Охрана труда \nпрограмма Б Водитель", match:"Охрана труда программа Б Водитель", period:"1 раз в год", years:1},
+  {head:"Охрана труда \nпрограмма В", match:"Охрана труда программа В", period:"1 раз в 3 года", years:3},
+  {head:"СИЗ", match:"СИЗ", period:"1 раз в 3 года", years:3},
+  {head:"Специалист по ППП", match:"Специалист по ППП", period:"бессрочно", years:99},
+  {head:"ПТМ ИТР \n(инструктирующие) повышение квалификации", match:"ПТМ ИТР (инструктирующие)", period:"1 раз в 5 лет", years:5},
+  {head:"Обращение с отходами", match:"Обращение с отходами", period:"1 раз в 5 лет", years:5},
+  {head:"ГВС", match:"ГВС", period:"1 раз в 5 лет", years:5},
+  {head:"Обращение с \nкислотой", match:"Обращение с кислотой", period:"1 раз в 5 лет", years:5},
+  {head:"Высота \n1,2,3 группа для СПД", match:"Высота 1,2,3 группа для СПД", period:"1 раз в 3 года", years:3},
+  {head:"Высота \n3 группа по приказу 782н", match:"Высота 3 группа по приказу 782н", period:"1 раз в 5 лет", years:5},
+  {head:"Защитное вождение", match:"Защитное вождение", period:"1 раз в год", years:1},
+  {head:"КОРЬ", match:"Корь прививка №1", period:"бессрочно", years:99, kind:'vaccine'},
+  {head:"ВОЗ", match:"ВОЗ", period:"пройден", years:99, kind:'passed'},
+  {head:"Пропуск \nГПН-Заполярье", match:"Пропуск ГПН-Заполярье", period:"", years:1}
 ];
 
 // ============ ИСПРАВЛЕНИЕ ИМЁН (опечатки в списке/регистрации) ============
@@ -2982,7 +2998,7 @@ const BASE_TRAININGS = [
   {type:'ГНВП', years:2},
   {type:'Высота  1,2 группа', years:3},
   {type:'Охрана труда  программа Б (Безопасные методы и при', years:3},
-  {type:'Охрана труда  программа В ( Безопасные методы и пр', years:1},
+  {type:'Охрана труда  программа В ( Безопасные методы и пр', years:3},
   {type:'СИЗ', years:3},
   {type:'Защитное вождение', years:1},
   {type:'Пропуск  ГПН-Заполярье', years:1},
@@ -3093,19 +3109,21 @@ async function exportTrainingMatrix(){
   const DAYS = {0.5:153, 1:365, 2:730, 3:1095, 5:1825};
   const matchRec = (rec,col)=>{
     const r=norm(rec.type), c=norm(col.match); let ok;
-    if(c.indexOf('охрана труда программа б')===0) ok=r.indexOf('охрана труда программа б')===0;
-    else if(c.indexOf('охрана труда программа в')===0) ok=r.indexOf('охрана труда программа в')===0;
-    else ok=(r===c);
+    if(c==='охрана труда программа б водитель') ok=r.indexOf('охрана труда программа б')===0 && r.indexOf('водитель')>0;
+    else if(c==='охрана труда программа б') ok=r.indexOf('охрана труда программа б')===0 && r.indexOf('водитель')<0;
+    else if(c==='охрана труда программа в') ok=r.indexOf('охрана труда программа в')===0;
+    else ok=(r===c) || !!(col.alias && col.alias.indexOf(r)>=0);
     if(!ok) return false;
     if(c==='сосуды под давлением') return col.indef ? (rec.years>=99) : (rec.years<99);
+    if(c==='психиатрическое освидетельствование') return true;
     return true;
   };
   const PEACH='FFFCE4D6', GOLD='FFFFC000', GOLD_L='FFFFD966', GREEN_H='FFC6E0B4',
         ORANGE_H='FFF4B183', GREEN_D='FFA9D08E', BLUE_D='FF9DC3E6';
   const thin={style:'thin',color:{argb:'FFBFBFBF'}};
   const border={top:thin,left:thin,bottom:thin,right:thin};
-  const headFill=j=> j<=1?GOLD : j<=13?GOLD_L : j<=26?GREEN_H : ORANGE_H;
-  const dataFill=j=> (j===28||j===29)?BLUE_D:GREEN_D;
+  const headFill=j=> j<=2?GOLD : j<=9?GOLD_L : j<=24?GREEN_H : ORANGE_H;
+  const dataFill=j=> (j>=29)?BLUE_D:GREEN_D;
 
   const wb=new ExcelJS.Workbook();
   const ws=wb.addWorksheet('Матрица',{views:[{state:'frozen',xSplit:3,ySplit:3}]});
@@ -3113,18 +3131,20 @@ async function exportTrainingMatrix(){
 
   ws.getCell('A1').value='Дата'; ws.getCell('B1').value='Ф.И.О.'; ws.getCell('C1').value='Должность';
   ws.getCell('D1').value='Медицинский центр';
-  ws.getCell('F1').value='ООО "Ньютех Велл Сервис"\nУдостоверение о проверке знаний';
-  ws.getCell('R1').value='Учебный центр АНО УМЦ ДПО "ПРОФИ"';
+  ws.getCell('G1').value='ООО "Ньютех Велл Сервис"\nУдостоверение о проверке знаний';
+  ws.getCell('M1').value='ЕПТ';
+  ws.getCell('N1').value='Учебный центр АНО УМЦ ДПО "ПРОФИ"';
+  ws.getCell('AC1').value='Деловой партнер';
   ws.getCell('A2').value={formula:'TODAY()'}; ws.getCell('A2').numFmt='dd.mm.yyyy';
   MATRIX_COLS.forEach((c,j)=>{ ws.getCell(2,4+j).value=c.head; });
   ws.getCell('A3').value='ПОДРАЗДЕЛЕНИЕ';
   MATRIX_COLS.forEach((c,j)=>{ ws.getCell(3,4+j).value=c.period; });
 
   ws.mergeCells('B1:B2'); ws.mergeCells('C1:C2');
-  ws.mergeCells('D1:E1'); ws.mergeCells('F1:Q1'); ws.mergeCells('R1:AD1'); ws.mergeCells('A3:C3');
+  ws.mergeCells('D1:F1'); ws.mergeCells('G1:L1'); ws.mergeCells('N1:AB1'); ws.mergeCells('AC1:AG1'); ws.mergeCells('A3:C3');
 
   for(let r=1;r<=3;r++) for(let c=1;c<=3+NC;c++) ws.getCell(r,c).border=border;
-  ['A1','B1','C1','D1','F1','R1'].forEach(a=>{ const cell=ws.getCell(a);
+  ['A1','B1','C1','D1','G1','M1','N1','AC1'].forEach(a=>{ const cell=ws.getCell(a);
     cell.font={bold:true,size:12,name:'Calibri'};
     cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
     cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:PEACH}}; });
@@ -3157,8 +3177,17 @@ async function exportTrainingMatrix(){
       const fcell=ws.getCell(fr,c), pcell=ws.getCell(pr,c);
       if(rec && rec.date){
         const d=new Date(rec.date);
+        if(col.kind==='vaccine'){ fcell.value='привит '+d.toLocaleDateString('ru-RU'); pcell.value='бессрочно'; return; }
+        if(col.kind==='passed'){ fcell.value='пройден'; return; }
         fcell.value=d; fcell.numFmt='dd.mm.yyyy';
-        if(col.period==='бессрочно'||col.years>=99){ pcell.value='бессрочно'; }
+        if(isOtV(rec.type)){
+          const ee=trainExpiry(rec); pcell.value=ee; pcell.numFmt='dd.mm.yyyy';
+          const diff=Math.round((ee-TODAY0)/(1000*60*60*24));
+          if(diff<0) hiCells.push({c, fill:RED_HI, font:RED_FONT});
+          else if(diff<40) hiCells.push({c, fill:YEL_HI, font:YEL_FONT});
+        }
+        else if(col.indef && col.years<99 && col.period==='бессрочно'){ pcell.value='бессрочно'; }
+        else if(col.period==='бессрочно'||col.years>=99){ pcell.value='бессрочно'; }
         else if(col.period===''){ /* без срока */ }
         else { const days=DAYS[col.years]||Math.round(col.years*365);
           const fa=fcell.address; pcell.value={formula:'IF('+fa+'>0,'+fa+'+'+days+'," ")'}; pcell.numFmt='dd.mm.yyyy';
