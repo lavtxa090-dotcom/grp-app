@@ -2903,14 +2903,20 @@ function openTrainEdit(idx){const t=APP.training[idx];document.getElementById('e
 function saveTrainingEdit(){
   const tidx=parseInt(document.getElementById('et-idx').value);
   const newDate=document.getElementById('et-date').value;
-  APP.training[tidx].date=newDate;
+  const rec=APP.training[tidx];
+  if(!rec){ showToast('Запись не найдена','red'); return; }
+  rec.date=newDate;
   if(typeof MASTER_TRAININGS!=='undefined'){
-    MASTER_TRAININGS.forEach(mt=>{ if(matchTrainRecord(mt, APP.training[tidx])) mt.date=newDate; });
+    MASTER_TRAININGS.forEach(mt=>{ if(matchTrainRecord(mt, rec)) mt.date=newDate; });
   }
   closeModal('modal-edit-training');
-  // СНАЧАЛА сохраняем, чтобы перерисовка не помешала записи
+  // пишем только изменённую запись, ошибки показываем явно
   if(db && auth && auth.currentUser){
-    db.ref('training').set(APP.training).catch(e=>console.error(e));
+    db.ref('training/'+tidx).set({person:rec.person,type:rec.type,date:newDate||'',years:rec.years||1})
+      .then(()=>showToast('✓ Сохранено в базе','green'))
+      .catch(e=>{ console.error(e); showToast('✕ НЕ сохранено: '+(e.code||e.message),'red'); });
+  } else {
+    showToast('✕ Нет подключения к базе — изменение не сохранено','red');
   }
   try{ renderTrainList(); }catch(e){}
   try{ if(typeof renderMatrix==='function') renderMatrix(); }catch(e){}
@@ -3052,7 +3058,7 @@ function restoreTrainingFromMatrix(notify){
     const matches = APP.training.filter(t => matchTrainRecord(t, mt));
     if(matches.length){
       matches.forEach(existing => {
-        if((notify || !existing.date) && mt.date && existing.date !== mt.date){
+        if(notify === true && mt.date && existing.date !== mt.date){
           existing.date = mt.date;
           if(mt.years) existing.years = mt.years;
           restored++;
@@ -3753,18 +3759,12 @@ function loadAllData(){
               needsRestore = true;
             } else if(typeof MASTER_TRAININGS !== 'undefined' && MASTER_TRAININGS.length){
               const activeNames = new Set((APP.employees||[]).map(e=>e.name));
-              let forceV25 = false;
-              try { if(!localStorage.getItem('grp_matrix_sync_v25')) forceV25 = true; } catch(_){}
-              const hasMissing = MASTER_TRAININGS.filter(mt => activeNames.has(mt.person) && mt.date).some(mt => {
-                const cur = APP.training.find(t => matchTrainRecord(t, mt) && t.date);
-                return !cur || (forceV25 && cur.date !== mt.date);
-              });
-              if(hasMissing || forceV25) needsRestore = true;
+              // добавляем только ОТСУТСТВУЮЩИЕ записи; существующие (в т.ч. отредактированные/очищенные вручную) не трогаем
+              const hasMissing = MASTER_TRAININGS.filter(mt => activeNames.has(mt.person) && mt.date).some(mt => !APP.training.find(t => matchTrainRecord(t, mt)));
+              if(hasMissing) needsRestore = true;
             }
             if(needsRestore){
-              let forceV25 = false;
-              try { if(!localStorage.getItem('grp_matrix_sync_v25')){ forceV25 = true; localStorage.setItem('grp_matrix_sync_v25','1'); } } catch(_){}
-              restoreTrainingFromMatrix(forceV25 ? 'silent_force' : false);
+              restoreTrainingFromMatrix(false);
             }
           }
         }
