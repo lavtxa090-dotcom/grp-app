@@ -1133,7 +1133,7 @@ const APP={
     {name:'Кондратенко Виктор Александрович',tab:'00521',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Липатников Денис Александрович',tab:'00799',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
-    {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
+    {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'master',status:'Активен'},
     {name:'Полянский Александр Алексеевич',tab:'10',pos:'Машинист ППДУ',role:'worker',status:'Активен'},
     {name:'Потлов Сергей Анатолиевич',tab:'01149',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
     {name:'Саликов Ришат Шабикович',tab:'01726',pos:'Оператор по ГРП',role:'worker',status:'Активен'},
@@ -2092,7 +2092,7 @@ const BRIGADE_ROSTER = [
   {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мирошниченко Дмитрий Анатольевич',tab:'1126',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'master'},
   {name:'Потлов Сергей Анатолиевич',tab:'01149',pos:'Оператор по ГРП',role:'worker'},
   {name:'Саликов Ришат Шабикович',tab:'01726',pos:'Оператор по ГРП',role:'worker'},
   {name:'Сапрыкин Иван Владимирович',tab:'00090',pos:'Оператор по ГРП',role:'worker'},
@@ -3372,7 +3372,7 @@ const AUTH_EMPLOYEES = [
   {name:'Мамлеев Александр Шайхулаевич',tab:'00971',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мирошниченко Дмитрий Анатольевич',tab:'1126',pos:'Оператор по ГРП',role:'worker'},
   {name:'Мугайминов Артур Рустамович',tab:'01450',pos:'Оператор по ГРП',role:'worker'},
-  {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'worker'},
+  {name:'Обыскалов Денис Сергеевич',tab:'01065',pos:'Оператор по ГРП',role:'master'},
   {name:'Потлов Сергей Анатолиевич',tab:'01149',pos:'Оператор по ГРП',role:'worker'},
   {name:'Саликов Ришат Шабикович',tab:'01726',pos:'Оператор по ГРП',role:'worker'},
   {name:'Сапрыкин Иван Владимирович',tab:'00090',pos:'Оператор по ГРП',role:'worker'},
@@ -3729,6 +3729,19 @@ function loadAllData(){
             APP[col] = keys.map(k=>data[k]).filter(v=>v!=null);
           }
           if(col === 'employees'){
+            // Выдача прав мастера (как у Транькова) указанным сотрудникам
+            const MASTER_GRANTS = ['Обыскалов Денис Сергеевич'];
+            let grantChanged = false;
+            (APP.employees||[]).forEach(e=>{ if(MASTER_GRANTS.indexOf(e.name)>=0 && e.role!=='master'){ e.role='master'; grantChanged=true; } });
+            if(grantChanged && APP.role==='master' && db && auth && auth.currentUser){
+              db.ref('employees').set(APP.employees).catch(()=>{});
+            }
+            // Если роль текущего пользователя в списке отличается от сессии — обновить сессию
+            const meEmp = (APP.employees||[]).find(e=>e.name===APP.currentUser);
+            if(meEmp && meEmp.role && meEmp.role!==APP.role && MASTER_GRANTS.indexOf(meEmp.name)>=0){
+              if(db && auth && auth.currentUser) db.ref('users/'+auth.currentUser.uid+'/role').set(meEmp.role).catch(()=>{});
+              applySession({name:APP.currentUser, role:meEmp.role});
+            }
             if(APP.role === 'master'){
               syncPublicRoster();
             }
